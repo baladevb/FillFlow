@@ -404,6 +404,18 @@
     if (key === 'Tab') {
       if (shift) moveFocusBackward(); else moveFocusForward();
     }
+
+    /* Browsers natively click focused buttons and links when Enter or Space
+       is pressed. Replicate that behaviour so form submit buttons work. */
+    if ((key === 'Enter' || key === 'Space') && !shift && !ctrl && !alt) {
+      const tag  = el.tagName;
+      const role = (el.getAttribute('role') || '').toLowerCase();
+      const isClickable = tag === 'BUTTON' || tag === 'A' ||
+        (tag === 'INPUT' && (el.type === 'submit' || el.type === 'button' || el.type === 'reset')) ||
+        role === 'button' || role === 'link';
+      if (isClickable) el.click();
+    }
+
     await sleep(30);
   }
 
