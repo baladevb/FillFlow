@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>FillFlow</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+
+  <div class="header">
+    <div class="logo">
+      <div class="logo-icon">
+        <svg viewBox="0 0 14 14" fill="none">
+          <rect x="1" y="1" width="5" height="5" rx="1" fill="white" opacity="0.9"/>
+          <rect x="7" y="1" width="6" height="2" rx="1" fill="white" opacity="0.55"/>
+          <rect x="7" y="4" width="6" height="2" rx="1" fill="white" opacity="0.55"/>
+          <rect x="1" y="8" width="12" height="2" rx="1" fill="white" opacity="0.3"/>
+          <rect x="1" y="11" width="9" height="2" rx="1" fill="white" opacity="0.3"/>
+        </svg>
+      </div>
+      <div>
+        <div class="logo-name">FillFlow</div>
+        <div class="logo-sub">Form automation · <span id="app-version"></span></div>
+      </div>
+    </div>
+    <div class="rc-toggle-wrap">
+      <span class="rc-label">RC Unlock</span>
+      <div class="toggle" id="rc-toggle"><div class="toggle-knob"></div></div>
+    </div>
+  </div>
+
+  <div id="running-view" class="hidden">
+    <div class="running-msg">
+      <div class="running-dot"></div>
+      <span id="running-text">Automation is running…</span>
+    </div>
+    <p class="running-hint">Monitor progress in the side panel.<br>Press ESC on the page to stop.</p>
+  </div>
+
+  <div id="normal-view">
+    <div class="tabs">
+      <button class="tab active" id="tab-run">Run</button>
+      <button class="tab"        id="tab-flows">Flows</button>
+    </div>
+
+    <div id="panel-run" class="panel">
+      <div class="section">
+        <div class="section-title">Paste data</div>
+        <textarea id="paste-area" placeholder="Paste rows from a spreadsheet here&#10;No headers — just copy the data rows directly"></textarea>
+        <div id="paste-info" class="info-text hidden"></div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">Flow</div>
+        <div class="no-flows-msg" id="no-flows-msg">No saved flows — create one in the Flows tab</div>
+        <div id="flow-list" class="hidden"></div>
+      </div>
+
+      <!-- Inline preview: first 5 type-steps, collapsed by default -->
+      <div id="preview-section" class="hidden">
+        <div class="preview-header">
+          <span class="section-title">First row preview</span>
+          <button class="preview-all-btn" id="preview-all-btn">See all rows →</button>
+        </div>
+        <div id="preview-table-wrap"></div>
+      </div>
+
+      <div id="capture-section" class="hidden">
+        <div class="section-title">First field</div>
+        <div class="capture-status">
+          <div class="capture-dot" id="capture-dot"></div>
+          <span id="capture-text">No field captured yet</span>
+        </div>
+        <div class="capture-btns">
+          <button class="capture-btn" id="capture-btn">◎  Capture field</button>
+          <button class="capture-clear hidden" id="capture-clear">Clear</button>
+        </div>
+        <div class="info-text" id="capture-hint">Click "Capture field" then click the first input on the form</div>
+      </div>
+      <div id="col-warning" class="warning-box hidden"></div>
+      <div class="run-row">
+        <button class="dry-run-btn" id="dry-run-btn" disabled>⚙ Dry run</button>
+        <button class="run-btn"     id="run-btn"     disabled>▶  Run</button>
+      </div>
+    </div>
+
+    <div id="panel-flows" class="panel hidden">
+      <div class="flows-toolbar">
+        <button class="new-flow-btn"    id="new-flow-btn">+ New flow</button>
+        <button class="import-flow-btn" id="import-flow-btn">↑ Import</button>
+      </div>
+      <div id="saved-list"><div class="no-flows-msg">No saved flows yet</div></div>
+    </div>
+  </div>
+
+  <!-- Full preview overlay -->
+  <div id="preview-overlay" class="preview-overlay hidden">
+    <div class="preview-overlay-header">
+      <span class="preview-overlay-title" id="preview-overlay-title">Preview</span>
+      <div class="preview-nav">
+        <button class="prev-nav-btn" id="prev-row-btn">‹</button>
+        <span class="preview-row-label" id="preview-row-label">Row 1 of 1</span>
+        <button class="prev-nav-btn" id="next-row-btn">›</button>
+      </div>
+      <button class="preview-close-btn" id="preview-close-btn">✕</button>
+    </div>
+    <div class="preview-overlay-body" id="preview-overlay-body"></div>
+  </div>
+
+  <!-- Hidden file input for import -->
+  <input type="file" id="import-file-input" accept=".json" style="display:none">
+
+  <script src="popup.js"></script>
+</body>
+</html>

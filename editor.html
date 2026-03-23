@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>FillFlow — Flow Editor</title>
+  <link rel="stylesheet" href="editor.css">
+</head>
+<body>
+
+  <div class="topbar">
+    <div class="topbar-left">
+      <div class="logo-icon">
+        <svg viewBox="0 0 14 14" fill="none">
+          <rect x="1" y="1" width="5" height="5" rx="1" fill="white" opacity="0.9"/>
+          <rect x="7" y="1" width="6" height="2" rx="1" fill="white" opacity="0.55"/>
+          <rect x="7" y="4" width="6" height="2" rx="1" fill="white" opacity="0.55"/>
+          <rect x="1" y="8" width="12" height="2" rx="1" fill="white" opacity="0.3"/>
+          <rect x="1" y="11" width="9" height="2" rx="1" fill="white" opacity="0.3"/>
+        </svg>
+      </div>
+      <span class="topbar-title">FillFlow</span>
+      <span class="topbar-sep"></span>
+      <span class="topbar-context" id="topbar-context">New flow</span>
+    </div>
+    <div class="topbar-right">
+      <button class="tbtn" id="export-btn" title="Export as JSON">↓ Export</button>
+      <button class="tbtn" id="close-btn">✕  Close</button>
+    </div>
+  </div>
+
+  <div class="main">
+
+    <!-- LEFT: STEP LIST -->
+    <div class="steps-panel">
+      <div class="panel-header">
+        <span class="panel-title">Keystroke sequence</span>
+        <span class="step-count" id="step-count">0 steps</span>
+        <div class="view-toggle">
+          <button class="vt active" id="vt-normal">Normal</button>
+          <button class="vt"        id="vt-compact">Compact</button>
+        </div>
+      </div>
+      <div class="steps-scroll" id="steps-scroll">
+        <div class="empty-steps" id="empty-steps">No steps yet — add them using the panel on the right</div>
+        <div id="step-list"></div>
+      </div>
+    </div>
+
+    <!-- RIGHT: BUILDER PANEL -->
+    <div class="builder-panel">
+      <div class="builder-scroll">
+
+        <div class="b-section">
+          <div class="b-title">Step type</div>
+          <div class="type-tabs" id="type-tabs">
+            <button class="type-tab active" data-type="type">Type column</button>
+            <button class="type-tab"        data-type="text">Custom text</button>
+            <button class="type-tab"        data-type="key">Press key</button>
+            <button class="type-tab"        data-type="wait">Wait</button>
+            <button class="type-tab"        data-type="waitforclick">Wait for click</button>
+            <button class="type-tab"        data-type="waituntil">Wait until ready</button>
+            <button class="type-tab"        data-type="skip">Skip steps</button>
+            <button class="type-tab"        data-type="focusfield">Focus field</button>
+          </div>
+        </div>
+
+        <div class="b-divider"></div>
+
+        <!-- Type column -->
+        <div id="opts-type" class="b-section">
+          <div class="b-title">Column</div>
+          <div class="col-input-row">
+            <input type="number" id="col-number" class="b-input col-num-input" min="1" value="1" placeholder="e.g. 1">
+            <span class="col-letter-badge" id="col-letter-badge">Col A</span>
+          </div>
+          <div class="b-hint">Column number from your data (1 = first column)</div>
+          <div class="b-title" style="margin-top:8px;">Label <span class="optional">(optional)</span></div>
+          <input type="text" id="col-label" class="b-input" placeholder="e.g. Invoice Number">
+          <div class="b-hint">Shown in the step list as "Col A — Invoice Number"</div>
+          <div class="b-title" style="margin-top:8px;">Field type</div>
+          <select id="col-field-type" class="b-select">
+            <option value="auto">Auto-detect</option>
+            <option value="text">Text / number</option>
+            <option value="date">Date (dd-mm-yyyy → browser format)</option>
+          </select>
+          <div class="quick-keys-row">
+            <span class="b-hint" style="margin:0;">Quick-add after this step:</span>
+            <button class="quick-key-btn" id="quick-tab-btn">↹ Tab</button>
+            <button class="quick-key-btn" id="quick-enter-btn">↵ Enter</button>
+          </div>
+        </div>
+
+        <!-- Custom text -->
+        <div id="opts-text" class="b-section hidden">
+          <div class="b-title">Text to type</div>
+          <input type="text" id="custom-text-value" class="b-input" placeholder="e.g. N/A or a fixed code">
+          <div class="b-hint">This exact text is typed on every row — not pulled from your data</div>
+          <div class="b-title" style="margin-top:8px;">Field type</div>
+          <select id="text-field-type" class="b-select">
+            <option value="auto">Auto-detect</option>
+            <option value="text">Text / number</option>
+            <option value="date">Date (convert to browser format)</option>
+          </select>
+          <div class="quick-keys-row">
+            <span class="b-hint" style="margin:0;">Quick-add after this step:</span>
+            <button class="quick-key-btn" id="quick-tab-text-btn">↹ Tab</button>
+            <button class="quick-key-btn" id="quick-enter-text-btn">↵ Enter</button>
+          </div>
+        </div>
+
+        <!-- Press key -->
+        <div id="opts-key" class="b-section hidden">
+          <div class="b-title">Modifiers</div>
+          <div class="mod-row">
+            <label class="mod-label"><input type="checkbox" id="mod-shift"> Shift</label>
+            <label class="mod-label"><input type="checkbox" id="mod-ctrl"> Ctrl</label>
+            <label class="mod-label"><input type="checkbox" id="mod-alt"> Alt</label>
+          </div>
+          <div class="b-title" style="margin-top:8px;">Key</div>
+          <select id="key-select" class="b-select">
+            <optgroup label="Navigation">
+              <option value="Tab">Tab</option>
+              <option value="Enter">Enter</option>
+              <option value="Escape">Escape</option>
+              <option value="Space">Space</option>
+              <option value="ArrowUp">Arrow Up</option>
+              <option value="ArrowDown">Arrow Down</option>
+              <option value="ArrowLeft">Arrow Left</option>
+              <option value="ArrowRight">Arrow Right</option>
+              <option value="Home">Home</option>
+              <option value="End">End</option>
+              <option value="PageUp">Page Up</option>
+              <option value="PageDown">Page Down</option>
+            </optgroup>
+            <optgroup label="Editing">
+              <option value="Backspace">Backspace</option>
+              <option value="Delete">Delete</option>
+              <option value="Insert">Insert</option>
+            </optgroup>
+            <optgroup label="Function keys">
+              <option value="F1">F1</option>
+              <option value="F2">F2</option>
+              <option value="F3">F3</option>
+              <option value="F4">F4</option>
+              <option value="F5">F5</option>
+              <option value="F6">F6</option>
+              <option value="F7">F7</option>
+              <option value="F8">F8</option>
+              <option value="F9">F9</option>
+              <option value="F10">F10</option>
+              <option value="F11">F11</option>
+              <option value="F12">F12</option>
+            </optgroup>
+            <optgroup label="Common Ctrl combos">
+              <option value="a">A  (select all with Ctrl)</option>
+              <option value="c">C  (copy with Ctrl)</option>
+              <option value="v">V  (paste with Ctrl)</option>
+              <option value="x">X  (cut with Ctrl)</option>
+              <option value="z">Z  (undo with Ctrl)</option>
+              <option value="y">Y  (redo with Ctrl)</option>
+            </optgroup>
+          </select>
+          <div class="key-preview" id="key-preview">Tab</div>
+          <div class="b-hint browser-key-warn hidden" id="browser-key-warn">
+            ⚠ F5, F11, Ctrl+W and other browser shortcuts cannot be simulated — the browser owns these keys and blocks them from page scripts.
+          </div>
+        </div>
+
+        <!-- Wait -->
+        <div id="opts-wait" class="b-section hidden">
+          <div class="b-title">Duration (seconds)</div>
+          <input type="number" id="wait-seconds" class="b-input" min="0.1" step="0.5" value="1.5">
+        </div>
+
+        <!-- Wait for click -->
+        <div id="opts-waitforclick" class="b-section hidden">
+          <div class="b-info">Execution pauses here until you click anywhere on the page. ESC still works during this wait.</div>
+        </div>
+
+        <!-- Wait until page ready -->
+        <div id="opts-waituntil" class="b-section hidden">
+          <div class="b-info">Polls <code>document.readyState</code> until the page reports interactive or complete. Use this after a step that loads new content from the server without a full page reload.</div>
+          <div class="b-title" style="margin-top:10px;">Retry every (seconds)</div>
+          <input type="number" id="waituntil-retry" class="b-input" min="0.5" step="0.5" value="2">
+          <div class="b-title" style="margin-top:8px;">Max retries</div>
+          <input type="number" id="waituntil-max" class="b-input" min="1" step="1" value="10">
+          <div class="b-hint">Gives up and continues after max retries × retry interval seconds</div>
+        </div>
+
+        <!-- Skip steps -->
+        <div id="opts-skip" class="b-section hidden">
+          <div class="b-title">Column</div>
+          <div class="col-input-row">
+            <input type="number" id="skip-col-number" class="b-input col-num-input" min="1" value="1">
+            <span class="col-letter-badge" id="skip-col-badge">Col A</span>
+          </div>
+          <div class="b-title" style="margin-top:8px;">Condition</div>
+          <select id="skip-operator" class="b-select">
+            <option value="equals">equals</option>
+            <option value="empty">is empty</option>
+            <option value="notempty">is not empty</option>
+          </select>
+          <div id="skip-value-wrap">
+            <div class="b-title" style="margin-top:8px;">Value <span class="optional">(case-insensitive)</span></div>
+            <input type="text" id="skip-value" class="b-input" placeholder="e.g. N/A">
+          </div>
+          <div class="b-title" style="margin-top:8px;">Behaviour</div>
+          <select id="skip-behaviour" class="b-select">
+            <option value="skip-if-met">Skip if condition IS met</option>
+            <option value="skip-if-not-met">Skip if condition is NOT met</option>
+          </select>
+          <div class="b-title" style="margin-top:8px;">Jump to step</div>
+          <select id="skip-jumpto" class="b-select">
+            <option value="">— save flow first to populate —</option>
+          </select>
+          <div class="b-hint">Steps in the list above — execution jumps to that step number</div>
+        </div>
+
+        <!-- Focus field -->
+        <div id="opts-focusfield" class="b-section hidden">
+          <div class="b-title">Focus method</div>
+          <div class="focus-opt-tabs" id="focus-opt-tabs">
+            <button class="focus-tab active" data-focus="capture">Capture</button>
+            <button class="focus-tab"        data-focus="waitforclick">Wait for click</button>
+          </div>
+          <div id="focus-detail-capture" class="b-info" style="margin-top:8px;">
+            First run pauses and shows the capture overlay — click the field you want to focus.
+            The selector is saved into this step automatically. All subsequent rows use the saved selector directly.
+          </div>
+          <div id="focus-detail-waitforclick" class="b-info hidden" style="margin-top:8px;">
+            Pauses on every row and waits for you to click the target field. Nothing is saved — useful when the field position varies.
+          </div>
+          <div id="focus-saved-selector-wrap" class="hidden" style="margin-top:8px;">
+            <div class="b-title">Saved selector</div>
+            <input type="text" id="focus-selector" class="b-input" placeholder="Saved automatically on first run" readonly>
+            <button class="small-btn" id="clear-focus-selector-btn" style="margin-top:4px;">Clear selector</button>
+          </div>
+        </div>
+
+        <button class="add-btn" id="add-btn">+ Add step</button>
+
+        <!-- Page separator insert -->
+        <div class="separator-insert-wrap">
+          <button class="separator-insert-btn" id="insert-separator-btn">⊕ Insert page separator at end</button>
+          <div class="b-hint" style="margin-top:4px;">Marks where a page navigation happens. Steps above run on the current page, steps below run on the next page.</div>
+          <label class="sep-skip-label">
+            <input type="checkbox" id="sep-skip-nav-check">
+            Skip navigation check
+          </label>
+          <div class="b-hint" style="margin-top:3px;">Check this if the page reloads silently (e.g. loads a table without a full navigation). FillFlow won't wait for a navigation event — it will resume as soon as the next page script runs.</div>
+        </div>
+
+        <div class="b-divider"></div>
+
+        <div class="b-section">
+          <div class="b-title">First field focus</div>
+          <div class="ff-tabs" id="ff-tabs">
+            <button class="ff-tab active" data-opt="A">A — Capture</button>
+            <button class="ff-tab"        data-opt="B">B — 3 sec</button>
+            <button class="ff-tab"        data-opt="C">C — On click</button>
+          </div>
+          <div id="ff-detail-A" class="b-info">
+            In the popup, click "Capture Field" then click the first field on the form. The selector is saved with the layout and used automatically on every run.
+          </div>
+          <div id="ff-detail-B" class="b-info hidden">
+            A 3-second countdown runs after pressing Run. Click the first field during that window.
+          </div>
+          <div id="ff-detail-C" class="b-info hidden">
+            Automation waits indefinitely after pressing Run. Your first click on the page becomes the starting field.
+          </div>
+          <div id="ff-selector-wrap">
+            <div class="b-title" style="margin-top:8px;">Saved selector</div>
+            <input type="text" id="ff-selector" class="b-input" placeholder="#fieldId or input[name=field]">
+            <div class="b-hint">Type or paste a CSS selector, or use "Capture Field" from the popup</div>
+            <button class="small-btn" id="clear-selector-btn">Clear selector</button>
+          </div>
+        </div>
+
+        <div class="b-divider"></div>
+
+        <div class="b-section">
+          <div class="b-title">Typing speed</div>
+          <div class="speed-row">
+            <span class="speed-lbl">Slow</span>
+            <input type="range" id="wpm-slider" min="20" max="100" step="5" value="100">
+            <span class="speed-val" id="wpm-val">100 WPM</span>
+          </div>
+        </div>
+
+        <div class="b-divider"></div>
+
+        <div class="b-section">
+          <div class="b-title">Flow name</div>
+          <input type="text" id="layout-name" class="b-input" placeholder="e.g. Invoice Entry Form">
+        </div>
+
+        <button class="save-btn" id="save-btn">Save flow</button>
+        <div id="save-feedback" class="save-feedback hidden"></div>
+
+      </div>
+    </div>
+
+  </div>
+
+  <script src="editor.js"></script>
+</body>
+</html>

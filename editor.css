@@ -1,0 +1,473 @@
+/* editor.css */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 13px;
+  background: #0d1520;
+  color: #e0e6f0;
+  overflow: hidden;
+}
+
+.hidden { display: none !important; }
+
+/* ── TOPBAR ─────────────────────────────────────────────── */
+.topbar {
+  height: 48px;
+  background: #111b27;
+  border-bottom: 0.5px solid rgba(255,255,255,0.07);
+  display: flex; align-items: center; padding: 0 18px;
+  gap: 12px; flex-shrink: 0;
+}
+.topbar-left  { display: flex; align-items: center; gap: 10px; flex: 1; }
+.topbar-right { display: flex; gap: 8px; }
+
+.logo-icon {
+  width: 26px; height: 26px;
+  background: #2e7df7; border-radius: 7px;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.logo-icon svg { width: 15px; height: 15px; }
+
+.topbar-title { font-size: 14px; font-weight: 600; color: #fff; }
+.topbar-sep   { width: 0.5px; height: 18px; background: rgba(255,255,255,0.12); }
+.topbar-context { font-size: 13px; color: rgba(255,255,255,0.4); }
+
+.tbtn {
+  height: 30px; padding: 0 14px; border-radius: 6px;
+  border: 0.5px solid rgba(255,255,255,0.12);
+  background: transparent; color: rgba(255,255,255,0.5);
+  font-size: 12px; cursor: pointer;
+}
+.tbtn:hover { background: rgba(255,255,255,0.07); color: rgba(255,255,255,0.8); }
+
+/* ── MAIN LAYOUT ────────────────────────────────────────── */
+.main {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  height: calc(100vh - 48px);
+  overflow: hidden;
+}
+
+/* ── STEPS PANEL ────────────────────────────────────────── */
+.steps-panel {
+  display: flex; flex-direction: column;
+  border-right: 0.5px solid rgba(255,255,255,0.07);
+  overflow: hidden;
+}
+
+.panel-header {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 18px 10px;
+  border-bottom: 0.5px solid rgba(255,255,255,0.07);
+  flex-shrink: 0;
+}
+.panel-title { flex: 1; font-size: 11px; font-weight: 600; color: rgba(255,255,255,0.35); text-transform: uppercase; letter-spacing: 0.07em; }
+.step-count  { font-size: 11px; background: rgba(255,255,255,0.07); color: rgba(255,255,255,0.4); padding: 2px 8px; border-radius: 99px; }
+
+.view-toggle {
+  display: flex;
+  border: 0.5px solid rgba(255,255,255,0.1);
+  border-radius: 5px; overflow: hidden;
+}
+.vt {
+  height: 24px; padding: 0 10px; font-size: 11px;
+  background: transparent; border: none;
+  color: rgba(255,255,255,0.3); cursor: pointer;
+}
+.vt.active { background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.8); }
+
+.steps-scroll {
+  flex: 1; overflow-y: auto; padding: 12px 18px;
+  display: flex; flex-direction: column; gap: 3px;
+}
+.steps-scroll::-webkit-scrollbar { width: 4px; }
+.steps-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 99px; }
+
+.empty-steps { font-size: 13px; color: rgba(255,255,255,0.2); padding: 16px 0; }
+
+/* ── STEP ROW (normal) ──────────────────────────────────── */
+.step-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 10px;
+  background: #151e2b;
+  border: 0.5px solid rgba(255,255,255,0.06);
+  border-radius: 6px; cursor: default;
+  transition: border-color 0.1s;
+}
+.step-row:hover { border-color: rgba(255,255,255,0.14); }
+.step-row:hover .step-acts { opacity: 1; }
+
+.drag-handle { color: rgba(255,255,255,0.15); font-size: 13px; cursor: grab; }
+.step-n      { font-size: 11px; color: rgba(255,255,255,0.2); min-width: 22px; font-variant-numeric: tabular-nums; }
+
+.step-badge {
+  font-size: 10px; font-weight: 600;
+  padding: 2px 7px; border-radius: 99px;
+  min-width: 46px; text-align: center; white-space: nowrap;
+}
+.b-type  { background: #1a3a5c; color: #6ab0f5; }
+.b-key   { background: #1a3d2a; color: #6fcf97; }
+.b-wait  { background: #3d2e10; color: #f2a93b; }
+.b-click { background: #2e1f3d; color: #bb86fc; }
+
+.step-val  { flex: 1; font-size: 12px; color: rgba(255,255,255,0.65); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.step-acts { display: flex; gap: 2px; opacity: 0; transition: opacity 0.1s; }
+
+.sact {
+  width: 22px; height: 22px; border-radius: 4px;
+  border: none; background: transparent;
+  color: rgba(255,255,255,0.3); font-size: 12px;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+}
+.sact:hover            { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.75); }
+.sact.del:hover        { color: #e05c5c; }
+
+/* ── STEP ROW (compact) ─────────────────────────────────── */
+.step-row.compact {
+  padding: 4px 10px; border-radius: 4px;
+}
+.step-row.compact .step-badge { font-size: 9px; padding: 1px 5px; min-width: 38px; }
+.step-row.compact .step-val   { font-size: 11px; }
+.step-row.compact .step-n     { font-size: 10px; }
+.step-row.compact .drag-handle,
+.step-row.compact .step-acts  { display: none; }
+
+/* ── BUILDER PANEL ──────────────────────────────────────── */
+.builder-panel {
+  background: #111b27;
+  display: flex; flex-direction: column;
+  overflow: hidden;
+}
+.builder-scroll {
+  flex: 1; overflow-y: auto; padding: 16px;
+  display: flex; flex-direction: column; gap: 14px;
+}
+.builder-scroll::-webkit-scrollbar { width: 4px; }
+.builder-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 99px; }
+
+/* ── BUILDER SECTION ────────────────────────────────────── */
+.b-section  { display: flex; flex-direction: column; gap: 7px; }
+.b-title    { font-size: 10px; font-weight: 600; color: rgba(255,255,255,0.3); text-transform: uppercase; letter-spacing: 0.07em; }
+.b-divider  { height: 0.5px; background: rgba(255,255,255,0.07); }
+.b-hint     { font-size: 11px; color: rgba(255,255,255,0.25); line-height: 1.5; }
+.b-info     { font-size: 12px; color: rgba(255,255,255,0.4); line-height: 1.6; background: #0f1720; border: 0.5px solid rgba(255,255,255,0.07); border-radius: 6px; padding: 8px 10px; }
+.optional   { font-size: 10px; color: rgba(255,255,255,0.2); font-weight: 400; text-transform: none; letter-spacing: 0; }
+
+/* ── INPUTS ─────────────────────────────────────────────── */
+.b-input, .b-select {
+  width: 100%; height: 30px;
+  background: #0f1720;
+  border: 0.5px solid rgba(255,255,255,0.1);
+  border-radius: 6px;
+  color: rgba(255,255,255,0.75);
+  font-size: 12px; padding: 0 10px;
+}
+.b-input:focus, .b-select:focus { outline: none; border-color: #2e7df7; }
+
+/* ── TYPE TABS ──────────────────────────────────────────── */
+.type-tabs  { display: flex; gap: 4px; flex-wrap: wrap; }
+.type-tab {
+  height: 28px; padding: 0 12px;
+  border-radius: 5px;
+  border: 0.5px solid rgba(255,255,255,0.1);
+  background: transparent; color: rgba(255,255,255,0.35);
+  font-size: 12px; cursor: pointer; white-space: nowrap;
+  transition: all 0.1s;
+}
+.type-tab:hover { color: rgba(255,255,255,0.6); }
+.type-tab.active[data-type="type"]        { border-color: #2e7df7; background: #1a3a5c; color: #6ab0f5; }
+.type-tab.active[data-type="key"]         { border-color: #27ae60; background: #1a3d2a; color: #6fcf97; }
+.type-tab.active[data-type="wait"]        { border-color: #e67e22; background: #3d2e10; color: #f2a93b; }
+.type-tab.active[data-type="waitforclick"]{ border-color: #9b59b6; background: #2e1f3d; color: #bb86fc; }
+
+/* ── FF TABS ────────────────────────────────────────────── */
+.ff-tabs { display: flex; gap: 4px; }
+.ff-tab {
+  flex: 1; height: 26px; border-radius: 5px;
+  border: 0.5px solid rgba(255,255,255,0.1);
+  background: transparent; color: rgba(255,255,255,0.3);
+  font-size: 11px; cursor: pointer;
+}
+.ff-tab.active { border-color: #2e7df7; background: #1a3a5c; color: #6ab0f5; }
+
+/* ── SPEED ──────────────────────────────────────────────── */
+.speed-row { display: flex; align-items: center; gap: 10px; }
+.speed-lbl { font-size: 11px; color: rgba(255,255,255,0.25); white-space: nowrap; }
+.speed-val { font-size: 12px; color: rgba(255,255,255,0.55); min-width: 64px; text-align: right; }
+input[type=range] {
+  flex: 1; -webkit-appearance: none; height: 3px;
+  background: rgba(255,255,255,0.1); border-radius: 99px; cursor: pointer;
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px; height: 14px; border-radius: 50%;
+  background: #fff; cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+}
+
+/* ── BUTTONS ────────────────────────────────────────────── */
+.add-btn {
+  width: 100%; height: 34px;
+  background: #2e7df7; border: none; border-radius: 7px;
+  font-size: 13px; font-weight: 600; color: #fff; cursor: pointer;
+}
+.add-btn:hover { background: #1a6de0; }
+
+.save-btn {
+  width: 100%; height: 36px;
+  background: #1a3d2a;
+  border: 0.5px solid rgba(111,207,151,0.35);
+  border-radius: 7px;
+  font-size: 13px; font-weight: 600;
+  color: #6fcf97; cursor: pointer;
+}
+.save-btn:hover { background: #22532f; }
+
+.small-btn {
+  align-self: flex-start;
+  height: 24px; padding: 0 10px;
+  background: transparent;
+  border: 0.5px solid rgba(255,255,255,0.1);
+  border-radius: 5px; font-size: 11px;
+  color: rgba(255,255,255,0.35); cursor: pointer;
+}
+.small-btn:hover { color: rgba(255,255,255,0.6); }
+
+/* ── SAVE FEEDBACK ──────────────────────────────────────── */
+.save-feedback {
+  padding: 8px 10px; border-radius: 6px;
+  font-size: 12px; text-align: center;
+}
+.save-feedback.ok  { background: rgba(111,207,151,0.1); border: 0.5px solid rgba(111,207,151,0.3); color: #6fcf97; }
+.save-feedback.err { background: rgba(224,92,92,0.1); border: 0.5px solid rgba(224,92,92,0.3); color: #e8a0a0; }
+
+/* ── New elements added in v2 ───────────────────────────── */
+
+/* Column letter badge next to number input */
+.col-input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.col-num-input {
+  width: 80px !important;
+  flex-shrink: 0;
+}
+.col-letter-badge {
+  font-size: 12px;
+  font-weight: 600;
+  color: #93c5fd;
+  background: #1e3a5f;
+  border: 1px solid #2d5a8e;
+  border-radius: 4px;
+  padding: 2px 8px;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+
+/* Quick Tab / Enter row */
+.quick-keys-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+.quick-key-btn {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 5px;
+  border: 1px solid #3b5a8a;
+  background: #1a3456;
+  color: #93c5fd;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.quick-key-btn:hover {
+  background: #1e4a80;
+  border-color: #60a0f0;
+  color: #fff;
+}
+
+/* Custom text step badge */
+.b-text {
+  background: #7c3aed22;
+  color: #c4b5fd;
+  border: 1px solid #7c3aed55;
+}
+
+/* ── Key modifier row ───────────────────────────────────── */
+.mod-row {
+  display: flex;
+  gap: 14px;
+}
+.mod-label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: rgba(255,255,255,0.6);
+  cursor: pointer;
+}
+.mod-label input[type="checkbox"] {
+  accent-color: #2e7df7;
+  width: 13px; height: 13px;
+  cursor: pointer;
+}
+
+/* Live key combo preview */
+.key-preview {
+  margin-top: 8px;
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: 'Consolas', 'Courier New', monospace;
+  color: #93c5fd;
+  background: #1e3a5f;
+  border: 0.5px solid #2d5a8e;
+  border-radius: 5px;
+  padding: 3px 10px;
+}
+
+/* ── Page load step badge ───────────────────────────────── */
+.b-pageload {
+  background: rgba(167,139,250,0.15);
+  color: #c4b5fd;
+  border: 1px solid rgba(167,139,250,0.4);
+}
+
+/* ── Page separator ─────────────────────────────────────── */
+.separator-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  margin: 2px 0;
+}
+.separator-line {
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, #7c3aed55, transparent);
+}
+.separator-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.separator-badge {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: #c4b5fd;
+  background: rgba(124,58,237,0.15);
+  border: 0.5px solid rgba(124,58,237,0.4);
+  border-radius: 4px;
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+.sep-del {
+  width: 20px !important;
+  height: 20px !important;
+  font-size: 10px !important;
+}
+
+/* Separator insert button */
+.separator-insert-wrap {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 0.5px solid rgba(255,255,255,0.07);
+}
+.separator-insert-btn {
+  width: 100%;
+  height: 32px;
+  background: transparent;
+  border: 0.5px dashed rgba(124,58,237,0.5);
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #c4b5fd;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.separator-insert-btn:hover {
+  background: rgba(124,58,237,0.08);
+  border-color: rgba(124,58,237,0.8);
+}
+
+/* ── Wait until / skip badges ───────────────────────────── */
+.b-waituntil {
+  background: rgba(16,185,129,0.12);
+  color: #6ee7b7;
+  border: 1px solid rgba(16,185,129,0.35);
+}
+.b-skip {
+  background: rgba(245,158,11,0.12);
+  color: #fcd34d;
+  border: 1px solid rgba(245,158,11,0.35);
+}
+
+/* ── Focus field step badge ─────────────────────────────── */
+.b-focusfield {
+  background: rgba(6,182,212,0.12);
+  color: #67e8f9;
+  border: 1px solid rgba(6,182,212,0.35);
+}
+
+/* Focus option tabs (Capture / Wait for click) */
+.focus-opt-tabs {
+  display: flex;
+  gap: 6px;
+}
+.focus-tab {
+  flex: 1; height: 28px;
+  background: transparent;
+  border: 0.5px solid rgba(255,255,255,0.12);
+  border-radius: 5px;
+  font-size: 11px; font-weight: 500;
+  color: rgba(255,255,255,0.4);
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+.focus-tab.active {
+  color: #67e8f9;
+  border-color: rgba(6,182,212,0.5);
+  background: rgba(6,182,212,0.08);
+}
+
+/* ── Browser-key warning ────────────────────────────────── */
+.browser-key-warn {
+  margin-top: 6px;
+  font-size: 11px;
+  color: #fcd34d;
+  line-height: 1.5;
+}
+
+/* ── Separator skip nav check ───────────────────────────── */
+.sep-skip-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: rgba(255,255,255,0.55);
+  cursor: pointer;
+  margin-top: 8px;
+}
+.sep-skip-label input[type="checkbox"] {
+  accent-color: #c4b5fd;
+  width: 13px; height: 13px;
+  cursor: pointer;
+}
+.sep-skip-badge {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: #fcd34d;
+  background: rgba(245,158,11,0.12);
+  border: 0.5px solid rgba(245,158,11,0.4);
+  border-radius: 3px;
+  padding: 1px 5px;
+}
