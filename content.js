@@ -58,6 +58,8 @@
 
   let captureOverlay = null;
 
+  let captureTimeoutId = null;
+
   /* ── Startup: check for pending cross-page resume ─────── */
   /* Declared after state vars so dryRun/isRunning etc. are initialised.
      Waits for DOM interactive so focusable elements exist before resuming. */
@@ -95,6 +97,16 @@
 
   function showCaptureOverlay() {
     if (document.getElementById('__ff_capture_banner')) return;
+
+    /* Auto-cancel capture after 5 minutes — prevents infinite hang */
+    captureTimeoutId = setTimeout(() => {
+      if (!captureMode) return;
+      captureMode    = false;
+      captureResolve = null;
+      hideCaptureOverlay();
+      chrome.runtime.sendMessage({ type: 'FF_CAPTURE_CANCELLED' }).catch(() => {});
+    }, 5 * 60 * 1000);
+
     captureOverlay = document.createElement('div');
     captureOverlay.id = '__ff_capture_banner';
     captureOverlay.style.cssText = [
@@ -109,6 +121,7 @@
   }
 
   function hideCaptureOverlay() {
+    if (captureTimeoutId) { clearTimeout(captureTimeoutId); captureTimeoutId = null; }
     if (captureOverlay) { captureOverlay.remove(); captureOverlay = null; }
     const el = document.getElementById('__ff_capture_banner');
     if (el) el.remove();
@@ -156,7 +169,15 @@
       captureMode = false;
       const resolve = captureResolve;
       captureResolve = null;
-      resolve(buildSelector(e.target));
+      hideCaptureOverlay();
+      /* Walk up from e.target skipping the overlay itself,
+         so clicking near-but-not-on the overlay still captures
+         the intended element underneath. */
+      let target = e.target;
+      while (target && target.id === '__ff_capture_banner') {
+        target = target.parentElement;
+      }
+      resolve(buildSelector(target || document.body));
       return;
     }
     if (clickWaitMode && clickWaitResolve) {
@@ -168,10 +189,36 @@
   }, true);
 
   /* ── CSS selector builder ───────────────────────────────── */
+  /* Tries multiple strategies in order of specificity and stability.
+     Returns the first selector that uniquely identifies the element. */
   function buildSelector(el) {
+    if (!el || !el.tagName) return 'body';
+    const tag = el.tagName.toLowerCase();
+
+    /* 1. id — most stable */
     if (el.id) return '#' + CSS.escape(el.id);
+
+    /* 2. name attribute — stable on form inputs */
     if (el.getAttribute('name'))
-      return el.tagName.toLowerCase() + '[name="' + el.getAttribute('name') + '"]';
+      return tag + '[name="' + el.getAttribute('name') + '"]';
+
+    /* 3. data-testid — stable automation attribute */
+    if (el.getAttribute('data-testid'))
+      return tag + '[data-testid="' + el.getAttribute('data-testid') + '"]';
+
+    /* 4. aria-label — stable accessibility attribute */
+    if (el.getAttribute('aria-label'))
+      return tag + '[aria-label="' + el.getAttribute('aria-label') + '"]';
+
+    /* 5. placeholder — stable on inputs */
+    if (el.getAttribute('placeholder'))
+      return tag + '[placeholder="' + el.getAttribute('placeholder') + '"]';
+
+    /* 6. type + value combination for inputs with no other identifiers */
+    if (tag === 'input' && el.type && el.type !== 'text')
+      return tag + '[type="' + el.type + '"]';
+
+    /* 7. DOM path — last resort, most brittle */
     const parts = [];
     let node = el;
     while (node && node !== document.body && node.tagName) {
@@ -181,7 +228,7 @@
         const siblings = Array.from(node.parentElement.children)
           .filter(n => n.tagName === node.tagName);
         if (siblings.length > 1)
-          part += `:nth-of-type(${siblings.indexOf(node) + 1})`;
+          part += ':nth-of-type(' + (siblings.indexOf(node) + 1) + ')';
       }
       parts.unshift(part);
       node = node.parentElement;
@@ -732,16 +779,16 @@
       case 'CAPTURE_FIELD_START':
         captureMode    = true;
         captureResolve = (selector) => {
-          hideCaptureOverlay();
+          /* hideCaptureOverlay already called before resolve in click listener */
           chrome.runtime.sendMessage({ type: 'FF_FIELD_CAPTURED', selector }).catch(() => {});
         };
         showCaptureOverlay();
         respond({ ok: true }); break;
       case 'CAPTURE_STEP_START':
-        /* Mid-run capture triggered by a focusfield step */
+        /* Mid-run capture triggered by a focusfield step.
+           hideCaptureOverlay is called before resolve in the click listener. */
         captureMode    = true;
         captureResolve = (selector) => {
-          hideCaptureOverlay();
           chrome.runtime.sendMessage({
             type: 'FF_STEP_FIELD_CAPTURED', selector, stepIndex: msg.stepIndex
           }).catch(() => {});
