@@ -28,22 +28,24 @@ async function saveAllFlows(flows) {
 /* ── Init ────────────────────────────────────────────────── */
 document.addEventListener('DOMContentLoaded', async () => {
 
-  const { runState } = await chrome.storage.local.get('runState');
+  const { runState } = await chrome.storage.session.get('runState');
   if (runState && ['running', 'paused', 'starting'].includes(runState.status)) {
     /* Only show running view if the run is on the currently active tab */
     const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!activeTab || runState.tabId === activeTab.id) {
+    if (activeTab && runState.tabId === activeTab.id) {
       showRunningView(runState);
       return;
     }
   }
   /* Do NOT remove runState here — side panel may still be reading it */
 
-  document.getElementById('tab-run').addEventListener('click',   () => switchTab('run'));
-  document.getElementById('tab-flows').addEventListener('click', () => switchTab('flows'));
+  document.getElementById('tab-run').addEventListener('click',     () => switchTab('run'));
+  document.getElementById('tab-flows').addEventListener('click',   () => switchTab('flows'));
+  document.getElementById('tab-scripts').addEventListener('click', () => switchTab('scripts'));
   document.getElementById('run-btn').addEventListener('click',       handleRun);
   document.getElementById('dry-run-btn').addEventListener('click',   handleDryRun);
   document.getElementById('new-flow-btn').addEventListener('click',  () => openEditor());
+  document.getElementById('new-script-page-btn').addEventListener('click', () => openScriptEditor(null));
   document.getElementById('capture-btn').addEventListener('click',   startCapture);
   document.getElementById('capture-clear').addEventListener('click', clearCapture);
   document.getElementById('import-flow-btn').addEventListener('click', () => {
@@ -85,16 +87,22 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (btn.dataset.action === 'export') exportFlow(id);
   });
 
+  /* TD 7 FIX: wire scripts list delegation once here instead of reassigning
+     list.onclick on every renderScriptsList() call */
+  document.getElementById('scripts-run-list').addEventListener('click', handleScriptListClick);
+
   allFlows = await loadAllFlows();
   renderRunList();
 
   chrome.runtime.onMessage.addListener((msg) => {
     if (msg.type === 'BG_FIELD_CAPTURED') {
-      loadAllFlows().then(flows => { allFlows = flows; updateCaptureSection(); });
+      isCapturing = false;
+      setCaptureListening(false);
+      loadAllFlows().then(flows => { allFlows = flows; updateCaptureSection(); checkReady(); });
     }
   });
 
-  const { captureState } = await chrome.storage.local.get('captureState');
+  const { captureState } = await chrome.storage.session.get('captureState');
   if (captureState?.active && !captureState?.midRun) {
     isCapturing = true;
     setCaptureListening(true);
@@ -117,12 +125,13 @@ function setToggle(val) {
 }
 
 /* ── Tabs ────────────────────────────────────────────────── */
-function switchTab(name) {
+async function switchTab(name) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('.panel').forEach(p => p.classList.add('hidden'));
   document.getElementById('tab-' + name).classList.add('active');
   document.getElementById('panel-' + name).classList.remove('hidden');
-  if (name === 'flows') renderManageList();
+  if (name === 'flows')   renderManageList();
+  if (name === 'scripts') await renderScriptsList();
 }
 
 /* ── Paste parser ────────────────────────────────────────── */
@@ -137,7 +146,9 @@ function onPaste() {
   parsedRows = raw.split('\n')
     .map(l => l.split('\t').map(c => c.trim()))
     .filter(r => r.some(c => c !== ''));
-  const cols = parsedRows.length > 0 ? Math.max(...parsedRows.map(r => r.length)) : 0;
+  /* TD 2 FIX: spreading large arrays into Math.max/min blows the call stack
+     above ~65k rows. Use reduce instead — O(n) and stack-safe at any size. */
+  const cols = parsedRows.reduce((max, r) => Math.max(max, r.length), 0);
   const info = document.getElementById('paste-info');
   info.textContent = `${parsedRows.length} row${parsedRows.length !== 1 ? 's' : ''} · ${cols} column${cols !== 1 ? 's' : ''}`;
   info.classList.remove('hidden');
@@ -188,7 +199,8 @@ function selectFlow(id) {
 
 /* ── Inline preview ──────────────────────────────────────── */
 function getTypeSteps(flow) {
-  return (flow?.steps || []).filter(s => s.type === 'type');
+  /* Include paste steps — they also consume column data */
+  return (flow?.steps || []).filter(s => s.type === 'type' || s.type === 'paste');
 }
 
 function renderInlinePreview() {
@@ -263,9 +275,10 @@ function renderOverlayRow(flow) {
     .map(s => {
       stepNum++;
       let desc, valCell;
-      if (s.type === 'type') {
+      if (s.type === 'type' || s.type === 'paste') {
         const val = (row && row[s.colIndex] != null) ? row[s.colIndex] : '—';
-        desc    = esc(s.label || `Col ${s.colIndex + 1}`);
+        const pasteTag = s.type === 'paste' ? ' ⚡' : '';
+        desc    = esc(s.label || `Col ${s.colIndex + 1}`) + pasteTag;
         valCell = `<td class="prev-val">${esc(val)}</td>`;
       } else if (s.type === 'text') {
         desc    = 'Custom text';
@@ -285,6 +298,9 @@ function renderOverlayRow(flow) {
       } else if (s.type === 'waituntil') {
         desc    = 'Wait until ready';
         valCell = `<td class="prev-val prev-dim">page ready</td>`;
+      } else if (s.type === 'script') {
+        desc    = s.label || 'Script';
+        valCell = `<td class="prev-val prev-dim">${s.timeout || 60}s timeout</td>`;
       } else {
         desc    = s.type;
         valCell = `<td class="prev-val prev-dim">—</td>`;
@@ -324,9 +340,24 @@ async function startCapture() {
     return;
   }
   if (!selectedFlowId) return;
+  const resp = await chrome.runtime.sendMessage({ type: 'POPUP_CAPTURE_START', flowId: selectedFlowId });
+  if (!resp?.ok) {
+    const msg = resp?.error === 'unreachable'
+      ? 'FillFlow cannot reach this page.\n\nPlease reload the page (F5) and try again.\n\nNote: capture does not work on chrome:// pages.'
+      : 'Could not start capture. Please try again.';
+    alert(msg);
+    return;
+  }
+  /* Open side panel so user can see the capture instruction banner */
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (tab) {
+      await chrome.sidePanel.setOptions({ tabId: tab.id, path: 'sidepanel.html', enabled: true });
+      await chrome.sidePanel.open({ tabId: tab.id });
+    }
+  } catch (_) {}
   isCapturing = true;
   setCaptureListening(true);
-  await chrome.runtime.sendMessage({ type: 'POPUP_CAPTURE_START', flowId: selectedFlowId });
 }
 
 function setCaptureListening(active) {
@@ -384,10 +415,12 @@ async function deleteFlow(id) {
     selectedFlowId = null;
     document.getElementById('capture-section').classList.add('hidden');
     document.getElementById('preview-section').classList.add('hidden');
+    document.getElementById('col-warning').classList.add('hidden');
   }
   await saveAllFlows(allFlows);
   renderRunList();
   renderManageList();
+  checkReady();
 }
 
 function exportFlow(id) {
@@ -399,7 +432,9 @@ function exportFlow(id) {
   a.href     = url;
   a.download = flow.name.replace(/[^a-z0-9_\- ]/gi, '_') + '.fillflow.json';
   a.click();
-  URL.revokeObjectURL(url);
+  /* TD 5 FIX: defer revoke — a.click() is async and the download may not
+     have started reading the blob by the time the next line runs. */
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 async function handleImport(e) {
@@ -429,13 +464,11 @@ function validateColumns() {
   warn.classList.add('hidden');
   if (!selectedFlowId || !parsedRows.length) return;
   const flow      = allFlows.find(f => f.id === selectedFlowId);
-  const typeSteps = (flow?.steps || []).filter(s => s.type === 'type');
+  const typeSteps = (flow?.steps || []).filter(s => s.type === 'type' || s.type === 'paste');
   if (!typeSteps.length) return;
-  const maxNeeded  = Math.max(...typeSteps.map(s => s.colIndex)) + 1;
-  /* Guard against empty parsedRows causing Math.min to return Infinity */
-  const actualCols = parsedRows.length > 0
-    ? Math.min(...parsedRows.map(r => r.length))
-    : 0;
+  /* TD 2 FIX: use reduce instead of spread into Math.max/min — safe at any row count */
+  const maxNeeded  = typeSteps.reduce((max, s) => Math.max(max, s.colIndex), 0) + 1;
+  const actualCols = parsedRows.reduce((min, r) => Math.min(min, r.length), Infinity);
   if (maxNeeded > actualCols) {
     warn.textContent = `Flow needs column ${maxNeeded} but your data only has ${actualCols} column(s).`;
     warn.classList.remove('hidden');
@@ -464,10 +497,11 @@ async function startRun(dryRun) {
   const flow = allFlows.find(f => f.id === selectedFlowId);
   if (!flow) return;
 
-  const typeSteps = (flow.steps || []).filter(s => s.type === 'type');
+  const typeSteps = (flow.steps || []).filter(s => s.type === 'type' || s.type === 'paste');
   if (typeSteps.length) {
-    const maxNeeded  = Math.max(...typeSteps.map(s => s.colIndex)) + 1;
-    const actualCols = parsedRows.length > 0 ? Math.min(...parsedRows.map(r => r.length)) : 0;
+    /* TD 2 FIX: reduce instead of spread — stack-safe at any row count */
+    const maxNeeded  = typeSteps.reduce((max, s) => Math.max(max, s.colIndex), 0) + 1;
+    const actualCols = parsedRows.reduce((min, r) => Math.min(min, r.length), Infinity);
     if (maxNeeded > actualCols) {
       document.getElementById('col-warning').classList.remove('hidden');
       return;
@@ -498,6 +532,119 @@ function showToast(msg) {
   toast.textContent = msg;
   toast.classList.add('visible');
   setTimeout(() => toast.classList.remove('visible'), 2500);
+}
+
+/* ── Scripts tab ─────────────────────────────────────────── */
+async function loadAllScripts() {
+  const { scripts } = await chrome.storage.local.get('scripts');
+  return scripts || [];
+}
+
+async function renderScriptsList() {
+  const list = document.getElementById('scripts-run-list');
+  const scripts = await loadAllScripts();
+  if (!scripts.length) {
+    list.innerHTML = '<div class="no-flows-msg">No saved scripts — click "+ New script"</div>';
+    return;
+  }
+  list.innerHTML = '';
+  scripts.forEach(s => {
+    const item = document.createElement('div');
+    item.className = 'manage-item';
+    const guards = [];
+    if (s.urlGuard?.enabled && s.urlGuard?.pattern) guards.push('🛡');
+    if (s.requireConfirm) guards.push('✋');
+    /* Show description first, fall back to last-run time, then never-run */
+    const meta = s.description
+      ? esc(s.description.slice(0, 40)) + (s.description.length > 40 ? '…' : '')
+      : s.lastRunAt ? 'Ran ' + relativeTime(s.lastRunAt) : 'Never run';
+    item.innerHTML = `
+      <span class="manage-item-name">${esc(s.name || 'Untitled')} ${guards.join(' ')}</span>
+      <span class="manage-item-meta">${meta}</span>
+      <button class="icon-btn" data-action="run-script" data-id="${s.id}" title="Run on current tab">▶</button>
+      <button class="icon-btn" data-action="edit-script" data-id="${s.id}" title="Edit">✎</button>
+      <button class="icon-btn del" data-action="del-script" data-id="${s.id}" title="Delete">✕</button>
+    `;
+    list.appendChild(item);
+  });
+  /* TD 7 FIX: delegated handler is wired once at DOMContentLoaded — removed from here */
+}
+
+function handleScriptListClick(e) {
+  const btn = e.target.closest('button[data-action]');
+  if (!btn) return;
+  const id = btn.dataset.id;
+  if (btn.dataset.action === 'run-script')  runScriptFromPopup(id);
+  if (btn.dataset.action === 'edit-script') openScriptEditor(id);
+  if (btn.dataset.action === 'del-script')  deleteScriptFromPopup(id);
+}
+
+function openScriptEditor(id) {
+  const url = chrome.runtime.getURL('scripts.html') + (id ? '?id=' + id : '');
+  chrome.tabs.create({ url });
+  window.close();
+}
+
+async function runScriptFromPopup(id) {
+  const { scripts } = await chrome.storage.local.get('scripts');
+  const script = (scripts || []).find(s => s.id === id);
+  if (!script) return;
+
+  /* requireConfirm check — happens in UI before sending to background */
+  if (script.requireConfirm) {
+    if (!confirm(`Run "${script.name}" on the current tab?`)) return;
+  }
+
+  /* URL guard pre-check */
+  if (script.urlGuard?.enabled && script.urlGuard?.pattern) {
+    const { url: currentUrl } = await chrome.runtime.sendMessage({ type: 'QUERY_TAB_URL' });
+    const matches = matchUrl(script.urlGuard.mode || 'contains', script.urlGuard.pattern, currentUrl || '');
+    if (!matches) {
+      alert(`URL guard blocked.\n\nThis script is set to only run on pages where URL ${script.urlGuard.mode || 'contains'}: "${script.urlGuard.pattern}"\n\nCurrent URL: ${currentUrl}`);
+      return;
+    }
+  }
+
+  /* Open side panel — output will appear there */
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (tab) {
+      await chrome.sidePanel.setOptions({ tabId: tab.id, path: 'sidepanel.html', enabled: true });
+      await chrome.sidePanel.open({ tabId: tab.id });
+    }
+  } catch (_) {}
+
+  chrome.runtime.sendMessage({ type: 'RUN_STANDALONE_SCRIPT', scriptId: id });
+  window.close();
+}
+
+async function deleteScriptFromPopup(id) {
+  if (!confirm('Delete this script? This cannot be undone.')) return;
+  const { scripts } = await chrome.storage.local.get('scripts');
+  await chrome.storage.local.set({ scripts: (scripts || []).filter(s => s.id !== id) });
+  await renderScriptsList();
+}
+
+function matchUrl(mode, pattern, url) {
+  try {
+    switch (mode) {
+      case 'contains':   return url.includes(pattern);
+      case 'startsWith': return url.startsWith(pattern);
+      case 'exact':      return url === pattern;
+      case 'regex':      return new RegExp(pattern).test(url);
+    }
+  } catch { return false; }
+  /* BUG 2 FIX: default to true (fail-open) to match background.js matchesUrl behaviour.
+     An unrecognised mode should allow the run, not silently block it. */
+  return true;
+}
+
+function relativeTime(ts) {
+  const diff = Date.now() - ts;
+  if (diff < 60_000)    return 'just now';
+  if (diff < 3_600_000) return Math.floor(diff / 60_000) + 'm ago';
+  if (diff < 86_400_000) return Math.floor(diff / 3_600_000) + 'h ago';
+  return Math.floor(diff / 86_400_000) + 'd ago';
 }
 
 /* ── Helpers ─────────────────────────────────────────────── */

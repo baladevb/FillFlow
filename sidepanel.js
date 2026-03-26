@@ -1,222 +1,271 @@
-/* sidepanel.js — FillFlow */
+/* sidepanel.js — FillFlow v2.1 */
 'use strict';
 
+const ss = chrome.storage.session;
 let startedAt = null;
 let isPaused  = false;
+let runTabId  = null;  /* tabId of the tab currently running automation */
 
 /* ── Init ────────────────────────────────────────────────── */
 document.addEventListener('DOMContentLoaded', async () => {
-  /* Restore state if side panel opened mid-run.
-     Only apply if the status is meaningful — ignore orphaned 'running'
-     states from a previous session that never cleaned up. */
-  const { runState } = await chrome.storage.local.get('runState');
+
+  /* Restore state if panel opened mid-run */
+  const { runState } = await ss.get('runState');
   if (runState) {
-    /* If status is 'running' or 'starting' but the run started more than
-       60 seconds ago with no row progress, it's likely a stale state */
-    /* Treat as stale if running/starting but started more than 60s ago
-       — covers both zero-progress and mid-run crashes */
-    const stale = (
-      (runState.status === 'running' || runState.status === 'starting') &&
-      (Date.now() - (runState.startedAt || 0)) > 60000
-    );
+    const stale = ['running','starting'].includes(runState.status) &&
+                  (Date.now() - (runState.startedAt || 0)) > 60_000;
     if (!stale) applyState(runState);
   }
 
-  /* Listen for live events forwarded by background */
   chrome.runtime.onMessage.addListener(onMessage);
 
-  /* Pause button — sends F9 equivalent to active tab */
-  document.getElementById('pause-btn').addEventListener('click', async () => {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!tab) return;
-    /* Toggle pause via background message rather than simulating F9
-       so it works regardless of which element has focus */
-    chrome.runtime.sendMessage({ type: 'SIDEPANEL_TOGGLE_PAUSE', tabId: tab.id });
+  document.getElementById('btn-pause').addEventListener('click', () => {
+    /* Use stored runTabId — querying the active tab would target the wrong tab
+       if the user has switched tabs since automation started. */
+    if (runTabId) chrome.runtime.sendMessage({ type: 'SIDEPANEL_TOGGLE_PAUSE', tabId: runTabId });
   });
 
-  /* Stop button — sends stop signal to active tab */
-  document.getElementById('stop-btn').addEventListener('click', async () => {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!tab) return;
-    chrome.runtime.sendMessage({ type: 'SIDEPANEL_STOP', tabId: tab.id });
+  document.getElementById('btn-stop').addEventListener('click', () => {
+    if (runTabId) chrome.runtime.sendMessage({ type: 'SIDEPANEL_STOP', tabId: runTabId });
   });
+
+  document.getElementById('capture-cancel').addEventListener('click', () => {
+    chrome.runtime.sendMessage({ type: 'POPUP_CAPTURE_CANCEL' });
+    hideCapturePanel();
+  });
+
+  /* Script panel dismiss */
+  document.getElementById('script-dismiss-btn').addEventListener('click', hideScriptPanel);
+
+  /* Check if capture was already active when panel opened */
+  const { captureState } = await ss.get('captureState');
+  if (captureState?.active) showCapturePanel(captureState.midRun ? 'step' : 'first-field');
 });
 
-/* ── Live message handler ────────────────────────────────── */
+/* ── Capture panel ───────────────────────────────────────── */
+function showCapturePanel(mode) {
+  const panel = document.getElementById('capture-panel');
+  const body  = document.getElementById('capture-body');
+  body.textContent = mode === 'step'
+    ? 'Switch to the page and click the field you want FillFlow to focus during the flow.'
+    : 'Switch to the page and click the first field FillFlow should start from.';
+  document.getElementById('capture-selector').classList.add('hidden');
+  panel.classList.remove('hidden');
+  setSubtitle('Click a field on the page…');
+}
+
+function hideCapturePanel() {
+  document.getElementById('capture-panel').classList.add('hidden');
+  setSubtitle('Ready');
+}
+
+function showCaptureSuccess(selector) {
+  const selEl = document.getElementById('capture-selector');
+  selEl.textContent = selector;
+  selEl.classList.remove('hidden');
+  document.getElementById('capture-body').textContent = 'Field captured successfully.';
+  /* Auto-hide after 2s */
+  setTimeout(hideCapturePanel, 2000);
+}
+
+/* ── Message handler ─────────────────────────────────────── */
 function onMessage(msg) {
   switch (msg.type) {
 
-    case 'SP_ROW_START':
-      setStatus('running', 'Running…');
-      updateRow(msg.current, msg.total);
-      hideMsg();
+    case 'SP_SCRIPT_START':
+      showScriptPanel(msg.name);
       break;
+
+    case 'SP_SCRIPT_DONE':
+      (msg.logs || []).forEach(l => appendScriptConsole(l.level, l.text));
+      if (msg.result) appendScriptConsole('result', '↩ ' + msg.result);
+      appendScriptConsole('done', '✓ Done');
+      finalizeScriptPanel(true);
+      break;
+
+    case 'SP_SCRIPT_ERROR':
+      (msg.logs || []).forEach(l => appendScriptConsole(l.level, l.text));
+      appendScriptConsole('error', '✗ ' + (msg.error || 'Unknown error'));
+      finalizeScriptPanel(false);
+      break;
+
+    case 'SP_ROW_START':
+      if (msg.tabId) runTabId = msg.tabId;  /* keep target tab pinned */
+      /* BUG 1 FIX: startedAt is only set by applyState() on the restore path.
+         For fresh runs the panel opens with startedAt=null, so elapsed_()
+         always returned 0. Initialise here on first row; reset on row 1 so
+         consecutive runs each get a fresh timer. */
+      if (!startedAt || msg.current === 1) startedAt = Date.now();
+      setStatus('running', 'Running…');
+      setRow(msg.current, msg.total);
+      hideMsg(); break;
 
     case 'SP_ROW_DONE':
       addLog(msg.current, 'done');
-      clearTyping();
-      break;
+      clearTyping(); break;
 
     case 'SP_COMPLETE':
-      updateRow(msg.total, msg.total);
+      setRow(msg.total, msg.total);
       setStatus('done', 'Done');
       clearTyping();
-      showDone();
-      break;
+      showDone(); break;
 
     case 'SP_STOPPED':
       setStatus('stopped', 'Stopped');
       clearTyping();
-      document.getElementById('controls').classList.add('hidden');
-      document.getElementById('hint').textContent = 'Automation stopped';
-      break;
+      el('controls').classList.add('hidden');
+      el('hint').textContent = 'Automation stopped'; break;
 
     case 'SP_PAUSE':
       isPaused = msg.paused;
-      if (isPaused) {
-        setStatus('paused', 'Paused');
-        document.getElementById('pause-btn').textContent = '▶  Resume';
-        document.getElementById('pause-btn').classList.add('active');
-      } else {
-        setStatus('running', 'Running…');
-        document.getElementById('pause-btn').textContent = '⏸  Pause';
-        document.getElementById('pause-btn').classList.remove('active');
-      }
-      break;
+      setStatus(isPaused ? 'paused' : 'running', isPaused ? 'Paused' : 'Running…');
+      el('btn-pause').textContent = isPaused ? '▶  Resume' : '⏸  Pause  (F9)';
+      el('btn-pause').classList.toggle('active', isPaused); break;
 
     case 'SP_COUNTDOWN':
-      if (msg.seconds > 0) {
-        showMsg(`Starting in ${msg.seconds}… click the first field now`);
-      } else {
-        hideMsg();
-      }
-      break;
+      msg.seconds > 0 ? showMsg(`Starting in ${msg.seconds}… click the first field now`) : hideMsg(); break;
 
     case 'SP_WAITING_CLICK':
-      showMsg('Click anywhere on the page to set the starting field…');
-      break;
+      showMsg('Click anywhere on the page to continue…'); break;
 
     case 'SP_STEP_TYPING':
-      showTyping(msg.label, msg.value);
-      break;
+      showTyping(msg.label, msg.value); break;
 
     case 'SP_WAITING_PAGE':
-      showMsg(`Waiting for page ready… attempt ${msg.attempt} of ${msg.max}`);
-      break;
+      showMsg(`Waiting for page… attempt ${msg.attempt} of ${msg.max}`); break;
 
     case 'SP_SEPARATOR_HIT':
-      if (msg.skipNavCheck) {
-        showMsg('Page separator reached — continuing when next page runs…');
-      } else {
-        showMsg('Page separator reached — waiting for navigation (30s timeout)…');
-      }
-      clearTyping();
-      break;
+      showMsg(msg.skipNavCheck
+        ? 'Separator reached — will continue when next page loads…'
+        : 'Separator reached — waiting for navigation (30s)…');
+      clearTyping(); break;
+
+    case 'SP_CAPTURE_START':
+      showCapturePanel(msg.mode); break;
+
+    case 'SP_CAPTURE_DONE':
+      showCaptureSuccess(msg.selector); break;
+
+    case 'SP_CAPTURE_CANCELLED':
+      hideCapturePanel(); break;
 
     case 'SP_CAPTURE_STEP_NEEDED':
-      setStatus('starting', 'Waiting for capture…');
-      showMsg('Click the field you want to focus on the page');
-      break;
+      showCapturePanel('step'); break;
 
     case 'SP_ERROR':
       setStatus('stopped', 'Error');
       showMsg('Error: ' + (msg.message || 'unknown'));
-      document.getElementById('controls').classList.add('hidden');
-      break;
+      el('controls').classList.add('hidden'); break;
   }
 }
 
-/* ── Restore state on open ───────────────────────────────── */
+/* ── Restore on open ─────────────────────────────────────── */
 function applyState(rs) {
   startedAt = rs.startedAt || Date.now();
-
-  document.getElementById('li-name').textContent = rs.layoutName || '—';
-  document.getElementById('dry-run-badge').classList.toggle('hidden', !rs.dryRun);
-  document.getElementById('li-meta').textContent =
-    `${rs.layoutStepCount || 0} steps · ${rs.wpm || 100} WPM`;
-
-  updateRow(rs.current || 0, rs.total || 0);
+  if (rs.tabId) runTabId = rs.tabId;
+  el('fi-name').textContent = rs.layoutName || '—';
+  el('fi-meta').textContent = `${rs.layoutStepCount || 0} steps · ${rs.wpm || 100} WPM`;
+  el('dry-badge').classList.toggle('hidden', !rs.dryRun);
+  setRow(rs.current || 0, rs.total || 0);
 
   if (rs.status === 'done') {
-    setStatus('done', 'Done');
-    showDone();
-    document.getElementById('controls').classList.add('hidden');
+    setStatus('done', 'Done'); showDone();
+    el('controls').classList.add('hidden');
   } else if (rs.status === 'stopped' || rs.status === 'error') {
     setStatus('stopped', rs.status === 'error' ? 'Error' : 'Stopped');
-    document.getElementById('controls').classList.add('hidden');
-    document.getElementById('hint').textContent = 'Automation stopped';
+    el('controls').classList.add('hidden');
+    el('hint').textContent = 'Automation stopped';
     if (rs.errorMessage) showMsg('Error: ' + rs.errorMessage);
   } else if (rs.status === 'paused') {
     setStatus('paused', 'Paused');
-    document.getElementById('pause-btn').textContent = '▶  Resume';
-    document.getElementById('pause-btn').classList.add('active');
+    el('btn-pause').textContent = '▶  Resume';
+    el('btn-pause').classList.add('active');
     isPaused = true;
   } else if (rs.status === 'starting') {
     setStatus('starting', 'Starting…');
   } else {
     setStatus('running', 'Running…');
   }
-
   (rs.log || []).forEach(e => addLog(e.row, e.status, e.time));
 }
 
-/* ── UI helpers ──────────────────────────────────────────── */
-function setStatus(cls, label) {
-  document.getElementById('pulse').className       = 'pulse ' + cls;
-  document.getElementById('status-label').textContent = label;
-  document.getElementById('header-sub').textContent   = label;
+/* ── Script panel ────────────────────────────────────────── */
+function showScriptPanel(name) {
+  const panel = document.getElementById('script-panel');
+  document.getElementById('script-panel-name').textContent = name || 'Running script…';
+  document.getElementById('script-panel-status').textContent = '';
+  document.getElementById('script-console').innerHTML = '';
+  document.getElementById('script-pulse').className = 'script-pulse';
+  panel.classList.remove('hidden');
+  setSubtitle('Script running…');
 }
 
-function updateRow(current, total) {
-  document.getElementById('row-big').textContent    = current || '—';
-  document.getElementById('row-total').textContent  = total ? `of ${total} rows` : 'waiting to start';
-  document.getElementById('status-val').textContent = total ? `Row ${current} of ${total}` : '';
-  const pct = total ? Math.round((current / total) * 100) : 0;
-  document.getElementById('progress-fill').style.width = pct + '%';
+function finalizeScriptPanel(ok) {
+  const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  document.getElementById('script-pulse').className = 'script-pulse ' + (ok ? 'done' : 'error');
+  document.getElementById('script-panel-status').textContent = (ok ? 'Done' : 'Error') + ' · ' + now;
+  setSubtitle(ok ? 'Script done' : 'Script error');
+}
+
+function hideScriptPanel() {
+  document.getElementById('script-panel').classList.add('hidden');
+  setSubtitle('Ready');
+}
+
+const SC_PREFIX = { log: '> ', info: 'ℹ ', warn: '⚠ ', error: '✗ ', result: '↩ ', done: '✓ ' };
+
+function appendScriptConsole(level, text) {
+  const body = document.getElementById('script-console');
+  const line = document.createElement('div');
+  line.className = 'sc-line ' + level;
+  const prefix = SC_PREFIX[level] || '> ';
+  line.textContent = prefix + text;
+  body.appendChild(line);
+  body.scrollTop = body.scrollHeight;
+}
+
+/* ── UI helpers ──────────────────────────────────────────── */
+function el(id) { return document.getElementById(id); }
+
+function setStatus(cls, label) {
+  el('pulse').className       = 'pulse ' + cls;
+  el('status-label').textContent = label;
+  setSubtitle(label);
+}
+
+function setSubtitle(text) { el('sp-subtitle').textContent = text; }
+
+function setRow(cur, tot) {
+  el('row-big').textContent = cur || '—';
+  el('row-of').textContent  = tot ? `of ${tot} rows` : 'waiting to start';
+  const pct = tot ? Math.round((cur / tot) * 100) : 0;
+  el('progress-bar').style.width = pct + '%';
 }
 
 function addLog(rowNum, status, timeStr) {
-  const old = document.getElementById('log-row-' + rowNum);
+  const old = el('log-row-' + rowNum);
   if (old) old.remove();
-  const elapsed = timeStr || getElapsed();
-  const item    = document.createElement('div');
-  item.className = 'log-item';
-  item.id        = 'log-row-' + rowNum;
-  item.innerHTML = `
-    <span class="log-row-n">Row ${rowNum}</span>
-    <span class="log-badge ${status}">${status === 'done' ? 'Done' : 'Running…'}</span>
-    <span class="log-time">${elapsed}</span>
-  `;
-  const list = document.getElementById('log-list');
+  const item = document.createElement('div');
+  item.className = 'log-item'; item.id = 'log-row-' + rowNum;
+  const elapsed = timeStr || elapsed_();
+  item.innerHTML = `<span class="log-n">Row ${rowNum}</span><span class="log-badge done">Done</span><span class="log-t">${elapsed}</span>`;
+  const list = el('log-list');
   list.appendChild(item);
   list.scrollTop = list.scrollHeight;
 }
 
 function showDone() {
-  document.getElementById('done-msg').classList.remove('hidden');
-  document.getElementById('controls').classList.add('hidden');
-  document.getElementById('hint').textContent = 'All rows completed successfully';
+  el('done-banner').classList.remove('hidden');
+  el('controls').classList.add('hidden');
+  el('hint').textContent = 'All rows completed successfully';
 }
 
-function showMsg(text) {
-  const el = document.getElementById('msg-box');
-  el.textContent = text;
-  el.classList.remove('hidden');
-}
-function hideMsg() {
-  document.getElementById('msg-box').classList.add('hidden');
-}
+function showMsg(text)  { const e = el('msg-box'); e.textContent = text; e.classList.remove('hidden'); }
+function hideMsg()      { el('msg-box').classList.add('hidden'); }
+function showTyping(l, v) { el('typing-label').textContent = l; el('typing-value').textContent = v || '(empty)'; el('typing-row').classList.remove('hidden'); }
+function clearTyping()  { el('typing-row').classList.add('hidden'); }
 
-function showTyping(label, value) {
-  document.getElementById('typing-label').textContent = label;
-  document.getElementById('typing-value').textContent = value || '(empty)';
-  document.getElementById('typing-indicator').classList.remove('hidden');
-}
-function clearTyping() {
-  document.getElementById('typing-indicator').classList.add('hidden');
-}
-
-function getElapsed() {
+function elapsed_() {
   const s = Math.round((Date.now() - (startedAt || Date.now())) / 1000);
-  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`;
 }

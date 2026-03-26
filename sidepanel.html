@@ -7,8 +7,8 @@
 </head>
 <body>
 
-  <div class="header">
-    <div class="logo-icon">
+  <div class="sp-header">
+    <div class="sp-logo">
       <svg viewBox="0 0 14 14" fill="none">
         <rect x="1" y="1" width="5" height="5" rx="1" fill="white" opacity="0.9"/>
         <rect x="7" y="1" width="6" height="2" rx="1" fill="white" opacity="0.55"/>
@@ -17,59 +17,79 @@
         <rect x="1" y="11" width="9" height="2" rx="1" fill="white" opacity="0.3"/>
       </svg>
     </div>
-    <div class="header-text">
-      <div class="header-name">FillFlow</div>
-      <div class="header-sub" id="header-sub">Waiting…</div>
+    <div class="sp-header-text">
+      <div class="sp-title">FillFlow</div>
+      <div class="sp-subtitle" id="sp-subtitle">Ready</div>
     </div>
   </div>
 
-  <div class="status-card">
-    <div class="status-top">
-      <div class="pulse" id="pulse"></div>
-      <span class="status-label" id="status-label">Waiting for run</span>
-      <span class="dry-run-badge hidden" id="dry-run-badge">DRY RUN</span>
-      <span class="status-val"   id="status-val"></span>
+  <!-- Capture panel — replaces the on-page overlay in v2 -->
+  <div class="capture-panel hidden" id="capture-panel">
+    <div class="capture-icon">🎯</div>
+    <div class="capture-heading">Click to capture</div>
+    <div class="capture-body" id="capture-body">Switch to the page and click the field you want to target.</div>
+    <div class="capture-selector hidden" id="capture-selector"></div>
+    <button class="capture-cancel" id="capture-cancel">✕  Cancel</button>
+  </div>
+
+  <!-- Standalone script output panel -->
+  <div class="script-panel hidden" id="script-panel">
+    <div class="script-panel-header">
+      <div class="script-pulse" id="script-pulse"></div>
+      <span class="script-panel-name" id="script-panel-name">Running script…</span>
+      <span class="script-panel-status" id="script-panel-status"></span>
     </div>
-    <div class="progress-bg">
-      <div class="progress-fill" id="progress-fill" style="width:0%"></div>
+    <div class="script-console" id="script-console"></div>
+    <button class="script-dismiss-btn" id="script-dismiss-btn">Dismiss</button>
+  </div>
+
+  <!-- Run panel -->
+  <div id="run-panel">
+
+    <div class="status-card">
+      <div class="status-row">
+        <div class="pulse" id="pulse"></div>
+        <span class="status-label" id="status-label">Waiting for run</span>
+        <span class="dry-badge hidden" id="dry-badge">DRY RUN</span>
+      </div>
+      <div class="progress-track">
+        <div class="progress-bar" id="progress-bar" style="width:0%"></div>
+      </div>
+      <div class="row-counter">
+        <span class="row-big" id="row-big">—</span>
+        <span class="row-of"  id="row-of">waiting to start</span>
+      </div>
     </div>
+
+    <div class="flow-info">
+      <span class="fi-name" id="fi-name">—</span>
+      <span class="fi-meta" id="fi-meta"></span>
+    </div>
+
+    <div class="typing-row hidden" id="typing-row">
+      <span class="typing-label" id="typing-label">—</span>
+      <span class="typing-value" id="typing-value">—</span>
+    </div>
+
+    <div class="msg-box hidden" id="msg-box"></div>
+
+    <div class="controls" id="controls">
+      <button class="btn-pause" id="btn-pause">⏸  Pause  (F9)</button>
+      <button class="btn-stop"  id="btn-stop">■  Stop</button>
+    </div>
+    <div class="hint" id="hint">F9 to pause · ESC to stop</div>
+
+    <div class="done-banner hidden" id="done-banner">
+      <span class="done-check">✓</span>
+      <span class="done-text">All rows completed</span>
+    </div>
+
+    <div class="log-section">
+      <div class="log-title">Record log</div>
+      <div id="log-list"></div>
+    </div>
+
   </div>
-
-  <div class="row-display">
-    <div class="row-big"   id="row-big">—</div>
-    <div class="row-total" id="row-total">waiting to start</div>
-  </div>
-
-  <div class="layout-info">
-    <div class="li-dot"></div>
-    <span class="li-name" id="li-name">—</span>
-    <span class="li-meta" id="li-meta"></span>
-  </div>
-
-  <!-- Live typing indicator -->
-  <div class="typing-indicator hidden" id="typing-indicator">
-    <div class="typing-label" id="typing-label">—</div>
-    <div class="typing-value" id="typing-value">—</div>
-  </div>
-
-  <div class="msg-box hidden" id="msg-box"></div>
-
-  <div class="controls" id="controls">
-    <button class="ctrl-btn pause" id="pause-btn">⏸  Pause  (F9)</button>
-    <button class="ctrl-btn stop"  id="stop-btn">■  Stop</button>
-  </div>
-  <div class="hint" id="hint">F9 to pause · ESC to emergency stop</div>
-
-  <div class="done-msg hidden" id="done-msg">
-    <div class="done-icon">✓</div>
-    <div class="done-text">All rows completed</div>
-  </div>
-
-  <div class="log-section">
-    <div class="log-title">Record log</div>
-    <div id="log-list"></div>
-  </div>
-
 
   <script src="sidepanel.js"></script>
 </body>

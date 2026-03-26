@@ -54,6 +54,7 @@
           <div class="b-title">Step type</div>
           <div class="type-tabs" id="type-tabs">
             <button class="type-tab active" data-type="type">Type column</button>
+            <button class="type-tab"        data-type="paste">Paste column</button>
             <button class="type-tab"        data-type="text">Custom text</button>
             <button class="type-tab"        data-type="key">Press key</button>
             <button class="type-tab"        data-type="wait">Wait</button>
@@ -61,6 +62,7 @@
             <button class="type-tab"        data-type="waituntil">Wait until ready</button>
             <button class="type-tab"        data-type="skip">Skip steps</button>
             <button class="type-tab"        data-type="focusfield">Focus field</button>
+            <button class="type-tab"        data-type="script">Script</button>
           </div>
         </div>
 
@@ -83,10 +85,37 @@
             <option value="text">Text / number</option>
             <option value="date">Date (dd-mm-yyyy → browser format)</option>
           </select>
+          <label class="clear-field-label">
+            <input type="checkbox" id="col-clear-field" checked>
+            Clear field before typing
+          </label>
+          <div class="b-hint" style="margin-top:2px;">Clears the existing field value before typing using native setter</div>
           <div class="quick-keys-row">
             <span class="b-hint" style="margin:0;">Quick-add after this step:</span>
             <button class="quick-key-btn" id="quick-tab-btn">↹ Tab</button>
             <button class="quick-key-btn" id="quick-enter-btn">↵ Enter</button>
+          </div>
+        </div>
+
+        <!-- Paste column -->
+        <div id="opts-paste" class="b-section hidden">
+          <div class="b-title">Column</div>
+          <div class="col-input-row">
+            <input type="number" id="paste-col-number" class="b-input col-num-input" min="1" value="1" placeholder="e.g. 1">
+            <span class="col-letter-badge" id="paste-col-letter-badge">Col A</span>
+          </div>
+          <div class="b-hint">Column number from your data (1 = first column)</div>
+          <div class="b-title" style="margin-top:8px;">Label <span class="optional">(optional)</span></div>
+          <input type="text" id="paste-col-label" class="b-input" placeholder="e.g. Remarks">
+          <label class="clear-field-label" style="margin-top:10px;">
+            <input type="checkbox" id="paste-clear-field" checked>
+            Clear field before pasting
+          </label>
+          <div class="b-hint" style="margin-top:2px;">Sets the entire value at once — instant regardless of length. Use for long text fields.</div>
+          <div class="quick-keys-row">
+            <span class="b-hint" style="margin:0;">Quick-add after this step:</span>
+            <button class="quick-key-btn" id="quick-tab-paste-btn">↹ Tab</button>
+            <button class="quick-key-btn" id="quick-enter-paste-btn">↵ Enter</button>
           </div>
         </div>
 
@@ -101,6 +130,11 @@
             <option value="text">Text / number</option>
             <option value="date">Date (convert to browser format)</option>
           </select>
+          <label class="clear-field-label">
+            <input type="checkbox" id="text-clear-field" checked>
+            Clear field before typing
+          </label>
+          <div class="b-hint" style="margin-top:2px;">Clears the existing field value before typing using native setter</div>
           <div class="quick-keys-row">
             <span class="b-hint" style="margin:0;">Quick-add after this step:</span>
             <button class="quick-key-btn" id="quick-tab-text-btn">↹ Tab</button>
@@ -237,6 +271,41 @@
           </div>
         </div>
 
+        <div id="opts-script" class="b-section hidden">
+          <div class="b-title">JavaScript code</div>
+          <div class="b-info" style="margin-bottom:6px;">
+            Runs in the page context (same as browser console). Use an async function if you need to await.
+            FillFlow waits for the script to finish before moving to the next step.
+            Execution is done via <code>chrome.scripting</code> — not blocked by page CSP.
+          </div>
+          <textarea id="script-code" class="b-input script-textarea" rows="10"
+            placeholder="// Example: click a button&#10;document.querySelector('input[name=Approve]').click();"></textarea>
+          <div class="b-row" style="margin-top:8px; gap:8px; align-items:center;">
+            <label class="b-label" style="margin:0;">Label</label>
+            <input type="text" id="script-label" class="b-input" style="flex:1;" placeholder="e.g. Batch approval">
+            <label class="b-label" style="margin:0;">Timeout (s)</label>
+            <input type="number" id="script-timeout" class="b-input" style="width:70px;" min="1" max="300" value="60">
+          </div>
+
+          <!-- URL Guard -->
+          <div class="guard-wrap" style="margin-top:10px;">
+            <label class="clear-field-label" style="font-size:11px; font-weight:600; color:rgba(255,255,255,0.5);">
+              <input type="checkbox" id="script-url-guard-enabled">
+              URL guard — skip this step if page URL doesn't match
+            </label>
+            <div id="script-url-guard-opts" class="hidden" style="margin-top:6px; display:flex; flex-direction:column; gap:5px;">
+              <select id="script-url-guard-mode" class="b-select" style="font-size:11px;">
+                <option value="contains">URL contains</option>
+                <option value="startsWith">URL starts with</option>
+                <option value="exact">URL equals exactly</option>
+                <option value="regex">URL matches regex</option>
+              </select>
+              <input type="text" id="script-url-guard-pattern" class="b-input" placeholder="e.g. myapp.com/approvals" style="font-size:11px;">
+              <div class="b-hint">Step is silently skipped when the URL doesn't match — no error, flow continues.</div>
+            </div>
+          </div>
+        </div>
+
         <button class="add-btn" id="add-btn">+ Add step</button>
 
         <!-- Page separator insert -->
@@ -285,6 +354,12 @@
             <input type="range" id="wpm-slider" min="20" max="100" step="5" value="100">
             <span class="speed-val" id="wpm-val">100 WPM</span>
           </div>
+        </div>
+
+        <div class="b-section">
+          <div class="b-title">Page resume delay (seconds)</div>
+          <input type="number" id="resume-delay" class="b-input" min="0" max="30" step="0.5" value="1" style="width:80px;">
+          <div class="b-hint">How long to wait after a new page loads before resuming the flow. Set higher for slow pages.</div>
         </div>
 
         <div class="b-divider"></div>

@@ -1,66 +1,27 @@
 {
   "manifest_version": 3,
   "name": "FillFlow",
-  "version": "1.1.0",
-  "description": "Browser form automation and right-click / paste unlocker. Fill repetitive web forms from clipboard data.",
-  "permissions": [
-    "storage",
-    "sidePanel",
-    "scripting",
-    "activeTab",
-    "alarms",
-    "tabs"
-  ],
-  "host_permissions": [
-    "<all_urls>"
-  ],
-  "background": {
-    "service_worker": "background.js"
-  },
-  "content_scripts": [
-    {
-      "matches": [
-        "<all_urls>"
-      ],
-      "js": [
-        "content.js"
-      ],
-      "run_at": "document_start",
-      "all_frames": false
-    }
-  ],
-  "web_accessible_resources": [
-    {
-      "resources": [
-        "injected.js"
-      ],
-      "matches": [
-        "<all_urls>"
-      ]
-    }
-  ],
+  "version": "2.2.0",
+  "description": "Browser form automation. Fill repetitive web forms from spreadsheet data. Run standalone scripts on any page.",
+  "permissions": ["storage","sidePanel","scripting","activeTab","alarms","tabs","webNavigation"],
+  "host_permissions": ["<all_urls>"],
+  "background": { "service_worker": "background.js" },
+  "content_scripts": [{
+    "matches": ["<all_urls>"],
+    "js": ["content.js"],
+    "run_at": "document_start",
+    "all_frames": true
+  }],
+  "web_accessible_resources": [{ "resources": ["injected.js"], "matches": ["<all_urls>"] }],
   "action": {
     "default_popup": "popup.html",
-    "default_icon": {
-      "16": "icons/icon16.png",
-      "48": "icons/icon48.png",
-      "128": "icons/icon128.png"
-    }
+    "default_icon": { "16": "icons/icon16.png", "48": "icons/icon48.png", "128": "icons/icon128.png" }
   },
-  "side_panel": {
-    "default_path": "sidepanel.html"
-  },
-  "icons": {
-    "16": "icons/icon16.png",
-    "48": "icons/icon48.png",
-    "128": "icons/icon128.png"
-  },
+  "side_panel": { "default_path": "sidepanel.html" },
+  "icons": { "16": "icons/icon16.png", "48": "icons/icon48.png", "128": "icons/icon128.png" },
   "commands": {
     "_execute_action": {
-      "suggested_key": {
-        "default": "Alt+Shift+F",
-        "mac": "Alt+Shift+F"
-      },
+      "suggested_key": { "default": "Alt+Shift+F", "mac": "Alt+Shift+F" },
       "description": "Open FillFlow"
     }
   }

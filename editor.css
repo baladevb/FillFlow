@@ -471,3 +471,46 @@ input[type=range]::-webkit-slider-thumb {
   border-radius: 3px;
   padding: 1px 5px;
 }
+
+/* ── Clear field checkbox ───────────────────────────────── */
+.clear-field-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: rgba(255,255,255,0.65);
+  cursor: pointer;
+  margin-top: 10px;
+}
+.clear-field-label input[type="checkbox"] {
+  accent-color: #60a5fa;
+  width: 13px;
+  height: 13px;
+  cursor: pointer;
+}
+
+.b-paste { background: #0e7490; color: #fff; }
+
+/* ── Script step badge ──────────────────────────────────── */
+.b-script {
+  background: rgba(139,92,246,0.15);
+  color: #c4b5fd;
+  border: 1px solid rgba(139,92,246,0.35);
+}
+
+/* ── Script textarea ────────────────────────────────────── */
+.script-textarea {
+  font-family: 'Consolas', 'Fira Mono', monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  resize: vertical;
+  min-height: 120px;
+  white-space: pre;
+  overflow-x: auto;
+}
+
+/* ── Drag-to-reorder ──────────────────────────────────────── */
+.step-row[draggable=true] { cursor: grab; }
+.step-row[draggable=true]:active { cursor: grabbing; }
+.step-row.dragging { opacity: 0.4; }
+.step-row.drag-over { outline: 2px solid #60a5fa; outline-offset: -2px; }

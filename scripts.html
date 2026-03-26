@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>FillFlow — Scripts</title>
+  <link rel="stylesheet" href="scripts.css">
+</head>
+<body>
+
+  <div class="topbar">
+    <div class="topbar-left">
+      <div class="logo-icon">
+        <svg viewBox="0 0 14 14" fill="none">
+          <rect x="1" y="1" width="5" height="5" rx="1" fill="white" opacity="0.9"/>
+          <rect x="7" y="1" width="6" height="2" rx="1" fill="white" opacity="0.55"/>
+          <rect x="7" y="4" width="6" height="2" rx="1" fill="white" opacity="0.55"/>
+          <rect x="1" y="8" width="12" height="2" rx="1" fill="white" opacity="0.3"/>
+          <rect x="1" y="11" width="9" height="2" rx="1" fill="white" opacity="0.3"/>
+        </svg>
+      </div>
+      <span class="topbar-title">FillFlow</span>
+      <span class="topbar-sep"></span>
+      <span class="topbar-context" id="topbar-context">Scripts</span>
+    </div>
+    <div class="topbar-right">
+      <button class="tbtn" id="export-btn" title="Export script as JSON">↓ Export</button>
+      <button class="tbtn" id="close-btn">✕  Close</button>
+    </div>
+  </div>
+
+  <div class="main">
+
+    <!-- LEFT: SCRIPTS LIST -->
+    <div class="scripts-panel">
+      <div class="panel-header">
+        <span class="panel-title">Saved scripts</span>
+        <button class="new-script-btn" id="new-script-btn">+ New</button>
+      </div>
+
+      <div class="scripts-scroll">
+        <div class="empty-scripts hidden" id="empty-scripts">
+          No scripts yet — click <strong>+ New</strong> to create one
+        </div>
+        <div id="script-list"></div>
+      </div>
+
+      <div class="import-row">
+        <button class="import-btn" id="import-btn">↑ Import JSON</button>
+        <input type="file" id="import-file-input" accept=".json" style="display:none">
+      </div>
+    </div>
+
+    <!-- RIGHT: EDITOR PANEL -->
+    <div class="editor-panel">
+      <div class="editor-scroll">
+
+        <!-- Empty state -->
+        <div class="no-selection" id="no-selection">
+          <div class="no-sel-icon">{ }</div>
+          <div class="no-sel-text">Select a script to edit, or create a new one</div>
+        </div>
+
+        <!-- Editor form -->
+        <div id="editor-form" class="hidden">
+
+          <div class="e-section">
+            <div class="e-title">Script name</div>
+            <input type="text" id="script-name" class="e-input" placeholder="e.g. Auto-approve batch">
+          </div>
+
+          <div class="e-section">
+            <div class="e-title">Description <span class="optional">(optional)</span></div>
+            <textarea id="script-desc" class="e-input e-textarea-sm" rows="2"
+              placeholder="What does this script do?"></textarea>
+          </div>
+
+          <div class="e-divider"></div>
+
+          <div class="e-section">
+            <div class="e-title">JavaScript code</div>
+            <div class="e-info">
+              Runs in the page context — same as the browser console. Supports <code>async/await</code>.
+              FillFlow captures <code>console.log</code>, <code>console.warn</code>, and <code>console.error</code>
+              and displays them in the output below.
+            </div>
+            <textarea id="script-code" class="e-input e-textarea-code" rows="16" spellcheck="false"
+              placeholder="// Example: click a button&#10;document.querySelector('button#submit').click();&#10;&#10;// Example: return a value (shown in output)&#10;return document.title;"></textarea>
+          </div>
+
+          <div class="e-divider"></div>
+
+          <!-- ── SAFEGUARDS ──────────────────────────────────────── -->
+          <div class="e-section">
+            <div class="safeguards-heading">
+              <span class="e-title" style="margin:0;">Safeguards</span>
+              <span class="safeguards-badge">Protect against accidental runs</span>
+            </div>
+
+            <!-- URL Guard -->
+            <div class="guard-block">
+              <div class="guard-header">
+                <label class="guard-toggle-label">
+                  <input type="checkbox" id="url-guard-enabled">
+                  <span class="guard-toggle-track"><span class="guard-toggle-knob"></span></span>
+                  URL guard — only run on matching pages
+                </label>
+              </div>
+              <div class="guard-body hidden" id="url-guard-body">
+                <div class="guard-row">
+                  <select id="url-guard-mode" class="e-select guard-mode-select">
+                    <option value="contains">URL contains</option>
+                    <option value="startsWith">URL starts with</option>
+                    <option value="exact">URL equals exactly</option>
+                    <option value="regex">URL matches regex</option>
+                  </select>
+                </div>
+                <div class="guard-row">
+                  <input type="text" id="url-guard-pattern" class="e-input" placeholder="e.g. myapp.com/approvals">
+                </div>
+                <div class="guard-row guard-test-row">
+                  <button class="test-url-btn" id="test-url-btn">⚡ Test against current tab</button>
+                  <span class="test-url-result hidden" id="test-url-result"></span>
+                </div>
+                <div class="e-hint">Script will be blocked if the current page URL does not match this pattern.</div>
+              </div>
+            </div>
+
+            <!-- Confirm before run -->
+            <div class="guard-block">
+              <div class="guard-header">
+                <label class="guard-toggle-label">
+                  <input type="checkbox" id="confirm-before-run">
+                  <span class="guard-toggle-track"><span class="guard-toggle-knob"></span></span>
+                  Require confirmation before every run
+                </label>
+              </div>
+              <div class="e-hint" style="margin-top:4px; padding-left:36px;">
+                Shows a confirm dialog when you click Run — prevents accidental execution.
+              </div>
+            </div>
+          </div>
+
+          <div class="e-divider"></div>
+
+          <!-- ── SETTINGS ────────────────────────────────────────── -->
+          <div class="e-section">
+            <div class="e-title">Settings</div>
+            <div class="settings-row">
+              <div class="setting-item">
+                <label class="e-label">Timeout (seconds)</label>
+                <input type="number" id="script-timeout" class="e-input e-input-sm" min="1" max="300" value="30">
+                <div class="e-hint">Script is killed if it exceeds this time.</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="e-divider"></div>
+
+          <!-- ── ACTIONS ─────────────────────────────────────────── -->
+          <div class="action-row">
+            <button class="run-btn" id="run-btn" title="Run on current tab">▶  Run on current tab</button>
+            <button class="save-btn" id="save-btn">Save</button>
+            <button class="del-btn hidden" id="del-btn">Delete</button>
+          </div>
+          <div id="save-feedback" class="save-feedback hidden"></div>
+
+          <!-- ── CONSOLE OUTPUT ──────────────────────────────────── -->
+          <div class="console-section hidden" id="console-section">
+            <div class="console-header">
+              <span class="console-title">Output</span>
+              <span class="console-status" id="console-status"></span>
+              <button class="console-clear-btn" id="console-clear-btn">Clear</button>
+            </div>
+            <div class="console-body" id="console-body"></div>
+          </div>
+
+        </div><!-- /#editor-form -->
+
+      </div>
+    </div>
+
+  </div>
+
+  <script src="scripts.js"></script>
+</body>
+</html>

@@ -44,7 +44,9 @@ const BADGE_CLASS = {
   waitforclick:'b-click',
   waituntil:   'b-waituntil',
   skip:        'b-skip',
-  focusfield:  'b-focusfield'
+  focusfield:  'b-focusfield',
+  paste:       'b-paste',
+  script:      'b-script'
 };
 const BADGE_LABEL = {
   type:        'Type',
@@ -54,7 +56,9 @@ const BADGE_LABEL = {
   waitforclick:'Click',
   waituntil:   'Ready',
   skip:        'Skip',
-  focusfield:  'Focus'
+  focusfield:  'Focus',
+  paste:       'Paste',
+  script:      'Script'
 };
 
 /* ── Init ────────────────────────────────────────────────── */
@@ -103,7 +107,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.querySelectorAll('.type-tab').forEach(t => t.classList.remove('active'));
     btn.classList.add('active');
     currentType = btn.dataset.type;
-    ['type','text','key','wait','waitforclick','waituntil','skip','focusfield'].forEach(t => {
+    ['type','paste','text','key','wait','waitforclick','waituntil','skip','focusfield','script'].forEach(t => {
       document.getElementById('opts-' + t).classList.toggle('hidden', t !== currentType);
     });
     if (currentType === 'skip') populateJumpToSelect();
@@ -113,6 +117,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('col-number').addEventListener('input', () => {
     const n = parseInt(document.getElementById('col-number').value, 10);
     document.getElementById('col-letter-badge').textContent = n >= 1 ? 'Col ' + colIndexToLetter(n - 1) : '';
+  });
+  document.getElementById('paste-col-number').addEventListener('input', () => {
+    const n = parseInt(document.getElementById('paste-col-number').value, 10);
+    document.getElementById('paste-col-letter-badge').textContent = n >= 1 ? 'Col ' + colIndexToLetter(n - 1) : '';
   });
   document.getElementById('skip-col-number').addEventListener('input', () => {
     const n = parseInt(document.getElementById('skip-col-number').value, 10);
@@ -125,12 +133,19 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('skip-value-wrap').classList.toggle('hidden', op !== 'equals');
   });
 
+  /* Script URL guard toggle */
+  document.getElementById('script-url-guard-enabled').addEventListener('change', (e) => {
+    document.getElementById('script-url-guard-opts').classList.toggle('hidden', !e.target.checked);
+  });
+
   /* Add step */
   document.getElementById('add-btn').addEventListener('click', addStep);
 
   /* Quick Tab / Enter buttons */
   document.getElementById('quick-tab-btn').addEventListener('click',        () => { addStep(); addKeyStep('Tab'); });
   document.getElementById('quick-enter-btn').addEventListener('click',      () => { addStep(); addKeyStep('Enter'); });
+  document.getElementById('quick-tab-paste-btn').addEventListener('click',  () => { addStep(); addKeyStep('Tab'); });
+  document.getElementById('quick-enter-paste-btn').addEventListener('click',() => { addStep(); addKeyStep('Enter'); });
   document.getElementById('quick-tab-text-btn').addEventListener('click',   () => { addStep(); addKeyStep('Tab'); });
   document.getElementById('quick-enter-text-btn').addEventListener('click', () => { addStep(); addKeyStep('Enter'); });
 
@@ -200,6 +215,66 @@ document.addEventListener('DOMContentLoaded', async () => {
       document.getElementById('ff-selector').value = ffSelector;
     }
   });
+
+  /* ── Drag-to-reorder steps ───────────────────────────────── */
+  let dragSrcIdx = null;
+  const stepList = document.getElementById('step-list');
+
+  stepList.addEventListener('dragstart', (e) => {
+    const row = e.target.closest('.step-row[draggable=true]');
+    if (!row) return;
+    dragSrcIdx = parseInt(row.dataset.idx, 10);
+    e.dataTransfer.effectAllowed = 'move';
+    setTimeout(() => row.classList.add('dragging'), 0);
+  });
+  stepList.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    const row = e.target.closest('.step-row[draggable=true]');
+    if (!row) return;
+    document.querySelectorAll('.step-row.drag-over').forEach(r => r.classList.remove('drag-over'));
+    row.classList.add('drag-over');
+  });
+  stepList.addEventListener('dragleave', (e) => {
+    if (!e.target.closest('.step-row')) {
+      document.querySelectorAll('.step-row.drag-over').forEach(r => r.classList.remove('drag-over'));
+    }
+  });
+  stepList.addEventListener('drop', (e) => {
+    e.preventDefault();
+    const row = e.target.closest('.step-row[draggable=true]');
+    document.querySelectorAll('.step-row.drag-over, .step-row.dragging').forEach(r => r.classList.remove('drag-over','dragging'));
+    if (!row || dragSrcIdx === null) { dragSrcIdx = null; return; }
+    const dst = parseInt(row.dataset.idx, 10);
+    if (dragSrcIdx === dst) { dragSrcIdx = null; return; }
+    /* Reorder — rebuild skip targets to reflect new indices */
+    const moved = steps.splice(dragSrcIdx, 1)[0];
+    steps.splice(dst, 0, moved);
+    /* After splicing, all indices >= min(src,dst) may have shifted.
+       Rebuild a mapping from old flat index → new flat index and apply it. */
+    const lo = Math.min(dragSrcIdx, dst), hi = Math.max(dragSrcIdx, dst);
+    steps.forEach(s => {
+      if (s.type !== 'skip' || s.jumpToIndex == null) return;
+      const ji = s.jumpToIndex;
+      if (ji < lo || ji > hi) return;  /* outside the moved range — unchanged */
+      if (ji === dragSrcIdx) {
+        s.jumpToIndex = dst;
+      } else if (dragSrcIdx < dst) {
+        /* moved forward — everything in (src,dst] shifts down by 1 */
+        s.jumpToIndex = ji - 1;
+      } else {
+        /* moved backward — everything in [dst,src) shifts up by 1 */
+        s.jumpToIndex = ji + 1;
+      }
+    });
+    dragSrcIdx = null;
+    renderSteps();
+    silentSave();
+  });
+  stepList.addEventListener('dragend', () => {
+    document.querySelectorAll('.step-row.dragging, .step-row.drag-over').forEach(r => r.classList.remove('dragging','drag-over'));
+    dragSrcIdx = null;
+  });
 });
 
 /* ── Storage helpers ─────────────────────────────────────── */
@@ -225,6 +300,7 @@ function loadLayout(layout) {
   document.getElementById('layout-name').value          = layout.name;
   document.getElementById('wpm-slider').value           = layout.wpm || 100;
   document.getElementById('wpm-val').textContent        = (layout.wpm || 100) + ' WPM';
+  document.getElementById('resume-delay').value         = layout.resumeDelay != null ? layout.resumeDelay : 1;
 
   ffOption   = layout.firstFieldOption   || 'A';
   ffSelector = layout.firstFieldSelector || '';
@@ -266,12 +342,23 @@ function addStep() {
       const label     = document.getElementById('col-label').value.trim();
       const fieldType = document.getElementById('col-field-type').value;
       const letter    = colIndexToLetter(num - 1);
-      step = { type: 'type', colIndex: num - 1, label: label ? `Col ${letter} — ${label}` : `Col ${letter}`, fieldType };
+      const clearField = document.getElementById('col-clear-field').checked;
+      step = { type: 'type', colIndex: num - 1, label: label ? `Col ${letter} — ${label}` : `Col ${letter}`, fieldType, clearField };
+      break;
+    }
+    case 'paste': {
+      const num = parseInt(document.getElementById('paste-col-number').value, 10);
+      if (!num || num < 1) { showFeedback('Enter a valid column number', false); return; }
+      const label      = document.getElementById('paste-col-label').value.trim();
+      const letter     = colIndexToLetter(num - 1);
+      const clearField = document.getElementById('paste-clear-field').checked;
+      step = { type: 'paste', colIndex: num - 1, label: label ? `Col ${letter} — ${label}` : `Col ${letter}`, clearField };
       break;
     }
     case 'text': {
       const fieldType = document.getElementById('text-field-type').value;
-      step = { type: 'text', value: document.getElementById('custom-text-value').value, fieldType };
+      const clearFieldText = document.getElementById('text-clear-field').checked;
+      step = { type: 'text', value: document.getElementById('custom-text-value').value, fieldType, clearField: clearFieldText };
       break;
     }
     case 'key': {
@@ -306,6 +393,23 @@ function addStep() {
         selector:    document.getElementById('focus-selector').value.trim() || ''
       };
       break;
+    case 'script': {
+      const code = document.getElementById('script-code').value;
+      if (!code.trim()) { showFeedback('Enter script code', false); return; }
+      const urlGuardEnabled = document.getElementById('script-url-guard-enabled').checked;
+      step = {
+        type:    'script',
+        code,
+        label:   document.getElementById('script-label').value.trim(),
+        timeout: parseFloat(document.getElementById('script-timeout').value) || 60,
+        urlGuard: {
+          enabled: urlGuardEnabled,
+          mode:    document.getElementById('script-url-guard-mode').value,
+          pattern: document.getElementById('script-url-guard-pattern').value.trim()
+        }
+      };
+      break;
+    }
     case 'skip': {
       const colNum = parseInt(document.getElementById('skip-col-number').value, 10);
       if (!colNum || colNum < 1) { showFeedback('Enter a valid column number', false); return; }
@@ -402,6 +506,8 @@ function renderSteps() {
     stepNum++;
     const row = document.createElement('div');
     row.className = 'step-row' + (isCompact ? ' compact' : '');
+    row.dataset.idx = idx;
+    row.setAttribute('draggable', 'true');
     const val = stepLabel(step);
     row.innerHTML = `
       <span class="drag-handle">⣿</span>
@@ -425,9 +531,14 @@ function stepLabel(step) {
   switch (step.type) {
     case 'type': {
       const badge = step.fieldType && step.fieldType !== 'auto' ? ` [${step.fieldType}]` : '';
-      return (step.label || `Col ${colIndexToLetter(step.colIndex)}`) + badge;
+      const clearBadge = step.clearField === false ? ' [keep]' : '';
+      return (step.label || `Col ${colIndexToLetter(step.colIndex)}`) + badge + clearBadge;
     }
-    case 'text':         return `"${step.value || ''}"`;
+    case 'paste': {
+      const clearBadge = step.clearField === false ? ' [keep]' : '';
+      return (step.label || `Col ${colIndexToLetter(step.colIndex)}`) + ' ⚡' + clearBadge;
+    }
+    case 'text':         return `"${step.value || ''}"` + (step.clearField === false ? ' [keep]' : '');
     case 'key':          return step.key;
     case 'wait':         return step.seconds + 's';
     case 'waitforclick': return 'Wait for click';
@@ -446,6 +557,10 @@ function stepLabel(step) {
       const toNum  = target ? `step ${target.displayNum}` : '⚠ invalid';
       return `${col} ${op} → ${when} met → ${toNum}`;
     }
+    case 'script': {
+      const guardBadge = step.urlGuard?.enabled && step.urlGuard?.pattern ? ' 🛡' : '';
+      return (step.label || ('Script (' + (step.timeout || 60) + 's timeout)')) + guardBadge;
+    }
     case 'separator':    return step.skipNavCheck ? 'Page separator (skip nav check)' : 'Page separator';
     default:             return step.type || '?';
   }
@@ -459,6 +574,21 @@ function setView(mode) {
   renderSteps();
 }
 
+/* ── Silent save — used after drag-reorder ───────────────── */
+/* Saves current steps without showing feedback or requiring a name.
+   Only works if the flow already has a name and is being edited. */
+async function silentSave() {
+  if (!editingId) return;  /* new unsaved flow — nothing to persist yet */
+  const name = document.getElementById('layout-name').value.trim();
+  if (!name) return;
+  const cleanSteps = steps.map(s => { const c = {...s}; delete c._idx; delete c._flowId; return c; });
+  const all = await loadAllFlows();
+  const idx = all.findIndex(l => l.id === editingId);
+  if (idx < 0) return;
+  all[idx] = { ...all[idx], steps: cleanSteps, updatedAt: Date.now() };
+  await saveAllFlows(all);
+}
+
 /* ── Save layout ─────────────────────────────────────────── */
 async function saveLayout() {
   const name = document.getElementById('layout-name').value.trim();
@@ -470,7 +600,7 @@ async function saveLayout() {
   /* Strip runtime-only annotations before saving */
   const cleanSteps = steps.map(s => {
     const clean = { ...s };
-    delete clean._flatIndex;
+    delete clean._idx;
     delete clean._flowId;
     return clean;
   });
@@ -479,6 +609,7 @@ async function saveLayout() {
     id:                 editingId || generateId(),
     name,
     wpm:                parseInt(document.getElementById('wpm-slider').value, 10),
+    resumeDelay:        parseFloat(document.getElementById('resume-delay').value) || 1,
     firstFieldOption:   ffOption,
     firstFieldSelector: ffOption === 'A' ? (document.getElementById('ff-selector').value.trim() || '') : '',
     steps:              cleanSteps,

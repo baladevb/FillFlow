@@ -41,6 +41,7 @@
     <div class="tabs">
       <button class="tab active" id="tab-run">Run</button>
       <button class="tab"        id="tab-flows">Flows</button>
+      <button class="tab"        id="tab-scripts">Scripts</button>
     </div>
 
     <div id="panel-run" class="panel">
@@ -82,6 +83,13 @@
         <button class="dry-run-btn" id="dry-run-btn" disabled>⚙ Dry run</button>
         <button class="run-btn"     id="run-btn"     disabled>▶  Run</button>
       </div>
+    </div>
+
+    <div id="panel-scripts" class="panel hidden">
+      <div class="flows-toolbar">
+        <button class="new-flow-btn" id="new-script-page-btn">+ New script</button>
+      </div>
+      <div id="scripts-run-list"><div class="no-flows-msg">No saved scripts yet</div></div>
     </div>
 
     <div id="panel-flows" class="panel hidden">

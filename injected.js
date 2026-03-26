@@ -35,7 +35,7 @@
   /* Fires before any page listener because useCapture = true and
      registered on window (above document). Neutralises preventDefault
      so the browser still shows the context menu / allows paste. */
-  const BLOCKED_EVENTS = ['contextmenu', 'paste', 'selectstart', 'dragstart', 'copy', 'cut'];
+  const BLOCKED_EVENTS = ['contextmenu', 'mousedown', 'paste', 'selectstart', 'dragstart', 'copy', 'cut'];
 
   function interceptor(e) {
     if (!rcEnabled) return;
@@ -85,18 +85,25 @@
 
   /* ── Clear inline on* handlers ───────────────────────────── */
   function clearInlineHandlers() {
-    const targets = [document, document.documentElement, document.head, document.body];
-    const props   = ['oncontextmenu', 'onpaste', 'onselectstart', 'ondragstart', 'oncopy', 'oncut'];
-    targets.forEach(t => {
+    /* Top-level elements */
+    const topTargets = [document, document.documentElement, document.head, document.body];
+    const props = ['oncontextmenu','onmousedown','onpaste','onselectstart','ondragstart','oncopy','oncut'];
+    topTargets.forEach(t => {
       if (!t) return;
       props.forEach(p => { try { t[p] = null; } catch (_) {} });
     });
+    /* All elements in the document — sites often set onmousedown/oncontextmenu on
+       specific inputs, forms, and divs rather than on body */
+    try {
+      document.querySelectorAll('[onmousedown],[oncontextmenu],[onselectstart]').forEach(el => {
+        props.forEach(p => { try { el[p] = null; } catch (_) {} });
+      });
+    } catch (_) {}
   }
 
-  /* Re-clear inline handlers after DOM is ready since some sites set them in DOMContentLoaded */
-  document.addEventListener('DOMContentLoaded', () => {
-    if (rcEnabled) clearInlineHandlers();
-  });
+  /* Re-clear after DOM ready and again after load — some sites set handlers late */
+  document.addEventListener('DOMContentLoaded', () => { if (rcEnabled) clearInlineHandlers(); });
+  window.addEventListener('load', () => { if (rcEnabled) clearInlineHandlers(); });
 
   /* Also intercept future addEventListener calls for contextmenu/paste
      so dynamically added handlers are also wrapped */
