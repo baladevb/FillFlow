@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "FillFlow",
-  "version": "2.2.0",
+  "version": "2.3.1",
   "description": "Browser form automation. Fill repetitive web forms from spreadsheet data. Run standalone scripts on any page.",
   "permissions": ["storage","sidePanel","scripting","activeTab","alarms","tabs","webNavigation"],
   "host_permissions": ["<all_urls>"],

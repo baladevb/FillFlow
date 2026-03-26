@@ -1,0 +1,64 @@
+/* theme.css — FillFlow shared design tokens
+   Import this first in every HTML page.
+   Page-specific CSS files contain only their own layout / component rules.  */
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  /* ── Brand blue — slightly deeper & cooler than Google's exact #1a73e8 ── */
+  --primary:            #1f57d4;
+  --primary-hover:      #1649be;
+  --primary-active:     #0e3ca8;
+  --primary-container:  #dce8ff;
+  --on-primary:         #fff;
+
+  /* ── Surfaces ──────────────────────────────────────────────────────────── */
+  --surface:            #fafafa;   /* page / popup background */
+  --surface-card:       #fff;      /* card / panel background  */
+  --surface-variant:    #eef0f3;   /* hover tint, inputs       */
+  --surface-container:  #f3f5f8;   /* subtle well              */
+
+  /* ── Text ───────────────────────────────────────────────────────────────── */
+  --on-surface:         #1a1d21;
+  --on-surface-variant: #606670;
+  --on-surface-muted:   #8a9099;
+
+  /* ── Borders ─────────────────────────────────────────────────────────────── */
+  --outline:            #d7dbe2;
+  --outline-variant:    #e5e8ee;
+
+  /* ── Semantic ────────────────────────────────────────────────────────────── */
+  --success:            #1a8a3b;
+  --success-container:  #e4f4ea;
+  --warning:            #d97000;
+  --warning-container:  #fef4e0;
+  --error:              #c0201d;
+  --error-container:    #fce7e6;
+
+  /* ── Elevation ───────────────────────────────────────────────────────────── */
+  --shadow-1: 0 1px 2px rgba(28,32,38,.22), 0 1px 3px 1px rgba(28,32,38,.11);
+  --shadow-2: 0 1px 2px rgba(28,32,38,.22), 0 2px 6px 2px rgba(28,32,38,.11);
+
+  /* ── Radii ───────────────────────────────────────────────────────────────── */
+  --r-xs: 3px;
+  --r-sm: 5px;
+  --r-md: 8px;
+  --r-lg: 12px;
+  --r-xl: 18px;
+  --r-pill: 99px;
+
+  /* ── Typography ──────────────────────────────────────────────────────────── */
+  --font:   'Segoe UI', system-ui, -apple-system, sans-serif;
+  --font-mono: 'Consolas', 'Courier New', monospace;
+}
+
+/* ── Base ──────────────────────────────────────────────────────────────────── */
+body {
+  font-family: var(--font);
+  font-size: 13px;
+  background: var(--surface);
+  color: var(--on-surface);
+  -webkit-font-smoothing: antialiased;
+}
+
+.hidden { display: none !important; }

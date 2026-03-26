@@ -4,7 +4,7 @@ FillFlow is a Chrome extension for high-volume web form work.
 
 Build a reusable flow once, paste spreadsheet rows, and FillFlow replays your steps across single-page and multi-page forms. It also includes a script runner for page automation tasks and an RC Unlock mode for sites that block right-click/paste.
 
-**Version 2.2.0**
+**Version 2.3.0**
 
 ---
 
@@ -361,6 +361,30 @@ fillflow/
 
 ## Changelog
 
+### v2.3.0
+
+#### Bug fixes
+
+- **Service worker state loss** (`background.js`): `lastWebTabId` is now persisted to `chrome.storage.session` on every update and restored on cold start. Chrome may terminate and restart a MV3 service worker at any time; previously this reset all module-level tracking variables, silently breaking active runs during page transitions.
+
+- **Navigation alarm race condition** (`background.js`): the single shared `ff_nav` alarm name and `navTabId` session key have been replaced with per-tab equivalents (`ff_nav_<tabId>` and `navTabId_<tabId>`). Concurrent automation runs in different tabs no longer collide, misfire alarms, or clear each other's navigation timeouts.
+
+- **Event listener leak** (`background.js`): the `chrome.tabs.onUpdated` listener registered by `handleSeparatorHit` is now stored in a per-tab `navListeners` map and cleaned up inside `chrome.tabs.onRemoved`. Previously, closing a tab before its expected navigation completed would leave an orphaned listener alive indefinitely in the service worker.
+
+- **Fail-open URL guard** (`background.js`, `content.js`): `matchesUrl` and `matchesUrlLocal` previously fell through to `return true` for any unrecognised `guard.mode` value. Both functions now default to `return false` for unknown modes, so a corrupt or malformed configuration cannot accidentally permit script execution on an unintended domain.
+
+- **Unhandled async rejections** (`background.js`): `startAutomation` and `runStandaloneScript` calls in the message router now have explicit `.catch(err => respond({ ok: false, error: err.message }))` handlers. Previously, an unexpected throw inside either function would leave the sender's response callback permanently unresolved.
+
+- **Invasive EventTarget monkey-patching** (`injected.js`): `EventTarget.prototype.addEventListener` now performs a fast exit for any event type not in the RC Unlock intercept set (`contextmenu`, `mousedown`, `paste`, `selectstart`, `dragstart`, `copy`, `cut`). The original code wrapped every single `addEventListener` call regardless of type, which could interfere with the internal event wiring of React, Angular, or other third-party libraries running on the target page.
+
+- **Date transformation validation** (`content.js`): `toDateValue` now constructs a `Date` object from the assembled ISO string and verifies that it round-trips correctly before returning it. Logically impossible dates such as February 31 previously passed the regex check and were written directly to the form field, producing a silent validation failure.
+
+- **Fragile tab targeting fallback** (`background.js`): `getWebTab` now queries with `lastFocusedWindow: true` and `windowType: 'normal'` filters before falling back to any tab. The previous fallback to `currentWindow: true` could resolve to an extension popup window, and the final fallback could match an unrelated background tab in a different window.
+
+#### UI
+
+- **Chrome-native visual redesign** (`popup.css`, `sidepanel.css`, `editor.css`, `scripts.css`): all extension pages now use Chrome's Material Design 3 colour system — light backgrounds, Google Blue (`#1a73e8`) as the primary accent, `Google Sans`/`Segoe UI` typography, outlined cards with `#dadce0` borders, pill-shaped buttons, and Google-standard surface/container/variant tokens. The previous dark navy theme has been replaced throughout.
+
 ### v2.2.0
 
 - Added a new **Scripts tab** in the popup to run, edit, and manage saved standalone scripts.
@@ -412,7 +436,7 @@ MIT — see [LICENSE](LICENSE) for details.
 
 A Chrome extension for automating repetitive web form entry from spreadsheet rows. FillFlow types values across multi-page form flows — and it can also run saved standalone JavaScript scripts on any page.
 
-**Version 2.2.0**
+**Version 2.3.0**
 
 ---
 

@@ -152,9 +152,11 @@
         case 'startsWith': return url.startsWith(guard.pattern);
         case 'exact':      return url === guard.pattern;
         case 'regex':      return new RegExp(guard.pattern).test(url);
+        /* FIX (fail-open URL guard): unrecognized mode defaults to false. */
+        default:           return false;
       }
     } catch { return false; }
-    return true;
+    return false;
   }
 
   /* ── Utilities ───────────────────────────────────────────── */
@@ -219,14 +221,24 @@
   function toDateValue(raw, type, dateFormat) {
     const s = String(raw).trim();
     if (type === 'date') {
-      if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+      if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+        const [y, mth, d] = s.split('-').map(str => parseInt(str, 10));
+        const dateObj = new Date(y, mth - 1, d);
+        if (!isNaN(dateObj) && dateObj.getFullYear() === y && (dateObj.getMonth() + 1) === mth && dateObj.getDate() === d) {
+          return s;
+        }
+        return s;
+      }
       const m = s.match(/^(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})$/);
       if (m) {
-        const [, a, b, year] = m;
-        const [day, month] = (dateFormat === 'mdy')
-          ? [b, a]   /* MM/DD/YYYY */
-          : [a, b];  /* DD/MM/YYYY (default) */
-        return `${year}-${month.padStart(2,'0')}-${day.padStart(2,'0')}`;
+        const [, a, b, yearStr] = m;
+        const [dayStr, monthStr] = (dateFormat === 'mdy') ? [b, a] : [a, b];
+        const y = parseInt(yearStr, 10), mth = parseInt(monthStr, 10), d = parseInt(dayStr, 10);
+        const dateObj = new Date(y, mth - 1, d);
+        if (!isNaN(dateObj) && dateObj.getFullYear() === y && (dateObj.getMonth() + 1) === mth && dateObj.getDate() === d) {
+          return `${y}-${String(mth).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+        }
+        return s;
       }
     }
     return s;

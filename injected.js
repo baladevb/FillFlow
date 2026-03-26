@@ -106,24 +106,31 @@
   window.addEventListener('load', () => { if (rcEnabled) clearInlineHandlers(); });
 
   /* Also intercept future addEventListener calls for contextmenu/paste
-     so dynamically added handlers are also wrapped */
+     so dynamically added handlers are also wrapped.
+     FIX (invasive monkey-patching): the override now exits immediately for
+     any event type that is not in BLOCKED_EVENTS so third-party libraries
+     that call addEventListener for unrelated types (click, input, resize …)
+     are completely unaffected. The wrapped function is only installed for
+     the small set of events RC unlock needs to intercept. */
+  const RC_TYPES = new Set(BLOCKED_EVENTS);
   const _ael = EventTarget.prototype.addEventListener;
   EventTarget.prototype.addEventListener = function (type, fn, opts) {
-    if (BLOCKED_EVENTS.includes(type) && typeof fn === 'function') {
-      const wrapped = function (e) {
-        if (rcEnabled) {
-          const real = e.preventDefault.bind(e);
-          e.preventDefault = () => {};
-          try { fn.call(this, e); } finally {
-            try { e.preventDefault = real; } catch (_) {}
-          }
-        } else {
-          fn.call(this, e);
-        }
-      };
-      return _ael.call(this, type, wrapped, opts);
+    /* Fast exit for the vast majority of event types — zero overhead. */
+    if (!RC_TYPES.has(type) || typeof fn !== 'function') {
+      return _ael.call(this, type, fn, opts);
     }
-    return _ael.call(this, type, fn, opts);
+    const wrapped = function (e) {
+      if (rcEnabled) {
+        const real = e.preventDefault.bind(e);
+        e.preventDefault = () => {};
+        try { fn.call(this, e); } finally {
+          try { e.preventDefault = real; } catch (_) {}
+        }
+      } else {
+        fn.call(this, e);
+      }
+    };
+    return _ael.call(this, type, wrapped, opts);
   };
 
 })();

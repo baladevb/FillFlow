@@ -1,4 +1,4 @@
-/* background.js — FillFlow v2.1 service worker */
+/* background.js — FillFlow v2.2 service worker */
 'use strict';
 
 chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: false }).catch(() => {});
@@ -10,8 +10,17 @@ const ps = chrome.storage.local;
 /* ── Web-tab tracking ────────────────────────────────────── */
 /* Scripts page (chrome-extension://) is NOT a web page. We track the last
    real web tab so script execution and URL guard tests target the right page
-   even when the scripts editor tab is currently active.                     */
+   even when the scripts editor tab is currently active.
+   FIX (service worker state loss): lastWebTabId is persisted in session
+   storage so it survives Chrome terminating and restarting the service worker
+   mid-run. Module-level variable is the fast-path cache; session storage is
+   the recovery path on cold start.                                           */
 let lastWebTabId = null;
+
+/* Restore lastWebTabId after a service worker restart. */
+ss.get('lastWebTabId').then(({ lastWebTabId: saved }) => {
+  if (saved) lastWebTabId = saved;
+}).catch(() => {});
 
 function isWebUrl(url) {
   if (!url) return false;
@@ -23,19 +32,37 @@ function isWebUrl(url) {
 
 chrome.tabs.onActivated.addListener(async ({ tabId }) => {
   const tab = await chrome.tabs.get(tabId).catch(() => null);
-  if (tab && isWebUrl(tab.url)) lastWebTabId = tabId;
+  if (tab && isWebUrl(tab.url)) {
+    lastWebTabId = tabId;
+    ss.set({ lastWebTabId }).catch(() => {});
+  }
 });
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (changeInfo.status === 'complete' && tab.active && isWebUrl(tab.url)) {
     lastWebTabId = tabId;
+    ss.set({ lastWebTabId }).catch(() => {});
   }
 });
 
 chrome.tabs.onRemoved.addListener((tabId) => {
-  if (lastWebTabId === tabId) lastWebTabId = null;
+  if (lastWebTabId === tabId) {
+    lastWebTabId = null;
+    ss.remove('lastWebTabId').catch(() => {});
+  }
   if (frameTimers[tabId])     { clearTimeout(frameTimers[tabId]); delete frameTimers[tabId]; }
   if (frameCandidates[tabId]) { delete frameCandidates[tabId]; }
+  /* FIX (event listener leak): if this tab was awaiting navigation, clean up
+     the onUpdated listener that would never fire now that the tab is gone.   */
+  const navKey = 'navTabId_' + tabId;
+  ss.get(navKey).then(result => {
+    if (result[navKey] && navListeners[tabId]) {
+      chrome.tabs.onUpdated.removeListener(navListeners[tabId]);
+      delete navListeners[tabId];
+      chrome.alarms.clear('ff_nav_' + tabId);
+      ss.remove([navKey, 'resume_' + tabId]).catch(() => {});
+    }
+  }).catch(() => {});
   ss.remove('resume_' + tabId).catch(() => {});
 });
 
@@ -45,12 +72,20 @@ async function getWebTab() {
     const tab = await chrome.tabs.get(lastWebTabId).catch(() => null);
     if (tab && isWebUrl(tab.url) && !tab.discarded) return tab;
     lastWebTabId = null;
+    ss.remove('lastWebTabId').catch(() => {});
   }
-  /* Fallback 1: active tab in current window if it's a web page */
-  const [active] = await chrome.tabs.query({ active: true, currentWindow: true });
+  /* Fallback 1: active tab in the last-focused window only.
+     FIX (fragile tab targeting): using lastFocusedWindow instead of
+     currentWindow avoids matching a background extension popup window
+     which would have no meaningful web page to automate.              */
+  const [active] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
   if (active && isWebUrl(active.url)) return active;
-  /* Fallback 2: any non-extension tab across all windows */
-  const all = await chrome.tabs.query({});
+  /* Fallback 2: active tab in any normal browser window (not popup/devtools) */
+  const inWindows = await chrome.tabs.query({ active: true, windowType: 'normal' });
+  const windowTab = inWindows.find(t => isWebUrl(t.url));
+  if (windowTab) return windowTab;
+  /* Fallback 3: any non-extension tab — last resort only */
+  const all = await chrome.tabs.query({ windowType: 'normal' });
   return all.find(t => isWebUrl(t.url)) || null;
 }
 
@@ -61,13 +96,13 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
 
   /* ── Automation start ──────────────────────────────────── */
   if (msg.type === 'POPUP_RUN') {
-    startAutomation(msg).then(respond);
+    startAutomation(msg).then(respond).catch(err => respond({ ok: false, error: err.message }));
     return true;
   }
 
   /* ── Standalone script run (from popup or scripts page) ── */
   if (msg.type === 'RUN_STANDALONE_SCRIPT') {
-    runStandaloneScript(msg).then(respond);
+    runStandaloneScript(msg).then(respond).catch(err => respond({ ok: false, error: err.message, logs: [] }));
     return true;
   }
 
@@ -190,12 +225,17 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
   }
 
   if (msg.type === 'FF_CANCEL_NAV_ALARM') {
-    chrome.alarms.clear('ff_nav');
-    if (navListener) {
-      chrome.tabs.onUpdated.removeListener(navListener);
-      navListener = null;
+    /* Cancel the nav alarm for the specific tab that sent this message.
+       msg.tabId is set by content.js; fall back to the sender tab.    */
+    const cancelTabId = msg.tabId || tabId;
+    if (cancelTabId) {
+      chrome.alarms.clear('ff_nav_' + cancelTabId);
+      if (navListeners[cancelTabId]) {
+        chrome.tabs.onUpdated.removeListener(navListeners[cancelTabId]);
+        delete navListeners[cancelTabId];
+      }
+      ss.remove('navTabId_' + cancelTabId).catch(() => {});
     }
-    ss.remove('navTabId').catch(() => {});
     respond({ ok: true });
     return;
   }
@@ -320,9 +360,13 @@ function matchesUrl(guard, url) {
       case 'startsWith': return url.startsWith(guard.pattern);
       case 'exact':      return url === guard.pattern;
       case 'regex':      return new RegExp(guard.pattern).test(url);
+      /* FIX (fail-open URL guard): unrecognized mode defaults to false
+         (deny) instead of true (allow), so a corrupt config cannot
+         accidentally permit execution on unintended domains.          */
+      default:           return false;
     }
   } catch { return false; }
-  return true;
+  return false;
 }
 
 /* ── Standalone script run ───────────────────────────────── */
@@ -519,39 +563,51 @@ async function handleFrameReady(tabId, frameId, hasForm) {
   }, delayMs);
 }
 
-/* TD 3 FIX: use a plain module-level variable instead of a property on the
-   function itself, which is fragile and surprising. */
-let navListener = null;
+/* FIX (navigation alarm race condition): use per-tab listener map and
+   per-tab alarm names so concurrent runs in different tabs do not collide
+   on a shared alarm name or a single session storage key.
+   FIX (event listener leak): navListeners entries are also cleaned up in
+   chrome.tabs.onRemoved so a closed tab cannot leave a dangling listener. */
+const navListeners = {};
 
 function handleSeparatorHit(msg, tabId) {
-  chrome.alarms.clear('ff_nav');
+  const alarmName = 'ff_nav_' + tabId;
+  const navKey    = 'navTabId_' + tabId;
+  chrome.alarms.clear(alarmName);
   if (msg.skipNavCheck) return;
   if (!tabId) return;
-  ss.set({ navTabId: tabId });
-  if (navListener) {
-    chrome.tabs.onUpdated.removeListener(navListener);
-    navListener = null;
+  ss.set({ [navKey]: tabId });
+  if (navListeners[tabId]) {
+    chrome.tabs.onUpdated.removeListener(navListeners[tabId]);
+    delete navListeners[tabId];
   }
   function onUpdated(id, info) {
     if (id !== tabId || info.status !== 'complete') return;
     chrome.tabs.onUpdated.removeListener(onUpdated);
-    navListener = null;
-    chrome.alarms.clear('ff_nav');
-    ss.remove('navTabId');
+    delete navListeners[tabId];
+    chrome.alarms.clear(alarmName);
+    ss.remove(navKey);
   }
-  navListener = onUpdated;
+  navListeners[tabId] = onUpdated;
   chrome.tabs.onUpdated.addListener(onUpdated);
   /* Chrome MV3 enforces a minimum alarm delay of 1 minute regardless of the
      value passed.  Use 1 to be explicit — 0.5 was being silently clamped. */
-  chrome.alarms.create('ff_nav', { delayInMinutes: 1 });
+  chrome.alarms.create(alarmName, { delayInMinutes: 1 });
 }
 
 chrome.alarms.onAlarm.addListener(async alarm => {
-  if (alarm.name !== 'ff_nav') return;
-  const { navTabId } = await ss.get('navTabId');
-  ss.remove('navTabId').catch(() => {});
-  if (!navTabId) return;
-  const key = 'resume_' + navTabId;
+  if (!alarm.name.startsWith('ff_nav_')) return;
+  const tabId  = parseInt(alarm.name.slice('ff_nav_'.length), 10);
+  const navKey = 'navTabId_' + tabId;
+  const result = await ss.get(navKey);
+  ss.remove(navKey).catch(() => {});
+  if (!result[navKey]) return;
+  /* Clean up any orphaned listener that may still be registered. */
+  if (navListeners[tabId]) {
+    chrome.tabs.onUpdated.removeListener(navListeners[tabId]);
+    delete navListeners[tabId];
+  }
+  const key = 'resume_' + tabId;
   const stored = await ss.get(key);
   if (!stored[key]) return;
   await ss.remove(key);
@@ -562,7 +618,6 @@ chrome.alarms.onAlarm.addListener(async alarm => {
     'Enable "Skip navigation check" on the separator if the page reloads silently.'
   }).catch(() => {});
 });
-
 async function updateRunState(msg) {
   const { runState } = await ss.get('runState');
   if (!runState) return;
